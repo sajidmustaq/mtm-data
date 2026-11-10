@@ -148,11 +148,17 @@ function showApp(user) {
   refreshAll();
 }
 
+function resetLoginPassword() {
+  $("showPass").checked = false;
+  $("lPass").type = "password";
+}
+
 function returnToLogin(message = "") {
   stopListeners();
   me = null; DATA = []; USERS = []; ENTRIES = []; LOG = []; usersLoaded = false; loggingOut = false;
   $("appView").classList.add("hidden");
   $("loginView").classList.remove("hidden");
+  resetLoginPassword();
   showError(message);
 }
 
@@ -177,6 +183,10 @@ onAuthStateChanged(auth, async account => {
   }
 }, error => showError(`Firebase لاگ اِن تیار نہیں: ${error.message}`));
 
+$("showPass").addEventListener("change", () => {
+  $("lPass").type = $("showPass").checked ? "text" : "password";
+});
+
 $("loginForm").addEventListener("submit", async event => {
   event.preventDefault();
   const username = $("lUser").value.trim();
@@ -189,6 +199,7 @@ $("loginForm").addEventListener("submit", async event => {
     await auth.authStateReady();
     await signInWithEmailAndPassword(auth, userEmail(username), password);
     $("lPass").value = "";
+    resetLoginPassword();
   } catch (error) {
     showError(error.code === "auth/too-many-requests"
       ? "بہت سی ناکام کوششیں؛ کچھ دیر بعد دوبارہ کوشش کریں۔"
