@@ -1,0 +1,128 @@
+:root {
+  --main: #1f5f4a;
+  --main-dark: #164838;
+  --bg: #f4f5f2;
+  --line: #d9ddd6;
+  --warn: #b7791f;
+  --danger: #b42318;
+  --text: #222;
+}
+* { box-sizing: border-box; }
+body {
+  margin: 0;
+  font-family: "Noto Naskh Arabic", "Jameel Noori Nastaleeq", Tahoma, serif;
+  background: var(--bg);
+  color: var(--text);
+  font-size: 16px;
+}
+.hidden { display: none !important; }
+
+/* لاگ اِن */
+.login-wrap { min-height: 100vh; display: flex; align-items: center; justify-content: center; }
+.login-box { background: #fff; width: 340px; padding: 28px; border: 1px solid var(--line); }
+.login-box h1 { margin: 0 0 18px; font-size: 22px; color: var(--main); text-align: center; }
+.login-box label { display: block; margin: 12px 0 4px; }
+.login-box input { width: 100%; }
+.login-box .btn { width: 100%; margin-top: 18px; }
+.err { color: var(--danger); min-height: 22px; margin: 10px 0 0; }
+.login-box .err { text-align: center; }
+.ok { color: var(--main); }
+
+/* ہیڈر */
+.topbar {
+  background: var(--main); color: #fff;
+  display: flex; justify-content: space-between; align-items: center;
+  padding: 10px 20px;
+}
+.topbar .title { font-size: 20px; font-weight: 700; }
+.who { display: flex; gap: 12px; align-items: center; }
+
+.tabs { background: #fff; border-bottom: 1px solid var(--line); padding: 0 16px; display: flex; gap: 4px; overflow-x: auto; }
+.tabs button {
+  border: none; background: none; padding: 12px 18px; font: inherit; cursor: pointer;
+  border-bottom: 3px solid transparent; color: #555; white-space: nowrap;
+}
+.tabs button.active { color: var(--main); border-bottom-color: var(--main); font-weight: 700; }
+
+main { padding: 16px 20px 40px; }
+h2 { color: var(--main); font-size: 18px; margin: 22px 0 10px; }
+.note { color: #555; font-size: 14px; max-width: 760px; }
+
+/* ٹول بار */
+.toolbar { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-bottom: 12px; }
+.toolbar .spacer { flex: 1; }
+input[type=text], input[type=password], select {
+  font: inherit; padding: 7px 10px; border: 1px solid var(--line); background: #fff; min-width: 140px;
+}
+input:focus, select:focus { outline: 2px solid var(--main); outline-offset: -1px; }
+#fSearch { min-width: 240px; }
+
+.btn, .btn-light {
+  font: inherit; padding: 7px 16px; cursor: pointer; border: 1px solid var(--main);
+  display: inline-block;
+}
+.btn { background: var(--main); color: #fff; }
+.btn:hover { background: var(--main-dark); }
+.btn:disabled { opacity: .6; cursor: default; }
+.btn-light { background: #fff; color: var(--main); }
+.btn-light:hover { background: #eef3f0; }
+.topbar .btn-light { border-color: #fff; background: transparent; color: #fff; }
+.topbar .btn-light:hover { background: rgba(255,255,255,.15); }
+
+/* خلاصہ */
+.summary { display: flex; flex-wrap: wrap; gap: 10px; margin-bottom: 14px; }
+.summary div { background: #fff; border: 1px solid var(--line); padding: 8px 16px; }
+.summary b { color: var(--main); font-size: 18px; margin-left: 6px; }
+.summary .rem b { color: var(--warn); }
+
+/* ٹیبل */
+.table-wrap { overflow-x: auto; background: #fff; border: 1px solid var(--line); }
+table { border-collapse: collapse; width: 100%; }
+th, td { padding: 8px 10px; border-bottom: 1px solid var(--line); text-align: right; white-space: nowrap; }
+th { background: #eef3f0; color: var(--main-dark); position: sticky; top: 0; font-weight: 700; }
+tbody tr:hover { background: #fafbf9; }
+tr.done td:first-child { border-right: 4px solid var(--main); }
+tr.pending td:first-child { border-right: 4px solid var(--warn); }
+td select { min-width: 100px; }
+td select.empty { border-color: var(--warn); }
+.center { text-align: center; padding: 24px; }
+
+.pager { display: flex; gap: 10px; align-items: center; justify-content: center; margin-top: 14px; }
+.pager button { font: inherit; padding: 5px 14px; border: 1px solid var(--line); background: #fff; cursor: pointer; }
+.pager button:disabled { opacity: .4; cursor: default; }
+
+.bar { background: #e3e7e1; height: 10px; width: 120px; display: inline-block; vertical-align: middle; margin-right: 8px; }
+.bar i { display: block; height: 100%; background: var(--main); }
+.rem-num { color: var(--warn); font-weight: 700; }
+tfoot td { font-weight: 700; background: #f7f8f5; }
+.link { color: var(--main); background: none; border: none; cursor: pointer; font: inherit; text-decoration: underline; padding: 0 6px; }
+.link.del { color: var(--danger); }
+.tag { display: inline-block; padding: 1px 8px; border: 1px solid var(--line); font-size: 14px; }
+.tag.off { color: var(--danger); border-color: var(--danger); }
+.wrap { white-space: normal; max-width: 320px; }
+
+/* فارم اور ڈائیلاگ */
+.form-grid { display: grid; gap: 10px; max-width: 420px; }
+.form-grid label, dialog label { display: block; }
+.form-grid input, dialog input[type=text], dialog input[type=password], dialog select { width: 100%; margin-top: 4px; }
+dialog { border: 1px solid var(--line); padding: 22px; width: min(440px, 94vw); font-family: inherit; }
+dialog::backdrop { background: rgba(0,0,0,.35); }
+dialog h3 { margin: 0 0 12px; color: var(--main); }
+dialog label { margin: 10px 0; }
+label.inline { display: flex; align-items: center; gap: 8px; }
+label.inline input { width: auto; margin: 0; }
+.checks { display: grid; grid-template-columns: 1fr 1fr; gap: 4px 12px; max-height: 160px; overflow: auto; border: 1px solid var(--line); padding: 8px; margin: 6px 0 10px; }
+.checks label { margin: 0; display: flex; gap: 6px; align-items: center; }
+.scope-checks { max-height: 300px; overflow: auto; border: 1px solid var(--line); padding: 8px; margin-top: 6px; }
+.scope-province { border-bottom: 1px solid var(--line); padding: 6px 0; }
+.scope-province:last-child { border-bottom: 0; }
+.scope-province small { color: #555; }
+.scope-province .checks { max-height: 100px; border: 0; margin: 4px 0 0; }
+.entry-owner { display: flex; align-items: center; gap: 6px; }
+.entry-owner select { min-width: 130px; }
+.dlg-actions { display: flex; gap: 8px; margin-top: 12px; }
+
+@media (max-width: 700px) {
+  .topbar { flex-direction: column; gap: 6px; }
+  #fSearch { min-width: 100%; }
+}

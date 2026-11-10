@@ -1,0 +1,13 @@
+/data.json
+/functions/node_modules/
+node_modules/
+.firebase/
+.env
+.env.*
+*.xlsx
+*.xls
+*.csv
+backup_*.json
+*.log
+.DS_Store
+Thumbs.db

@@ -1,0 +1,170 @@
+<!DOCTYPE html>
+<html lang="ur" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://www.gstatic.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src 'self' data:; connect-src 'self' https://*.googleapis.com https://*.firebaseio.com https://*.firebaseapp.com https://*.cloudfunctions.net wss://*.firebaseio.com; frame-src 'self' https://mtm-data.firebaseapp.com; object-src 'none'; base-uri 'none'; form-action 'self'">
+<meta name="referrer" content="strict-origin-when-cross-origin">
+<title>مدرسین تصدیق نظام</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Noto+Naskh+Arabic:wght@400;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<!-- لاگ اِن -->
+<div id="loginView" class="login-wrap">
+  <form id="loginForm" class="login-box" autocomplete="off">
+    <h1>مدرسین تصدیق نظام</h1>
+    <label for="lUser">یوزر آئی ڈی</label>
+    <input type="text" id="lUser" autocomplete="username" required>
+    <label for="lPass">پاس ورڈ</label>
+    <input type="password" id="lPass" autocomplete="current-password" required>
+    <button type="submit" class="btn" id="lBtn">لاگ اِن</button>
+    <p id="loginErr" class="err"></p>
+  </form>
+</div>
+
+<!-- مین ایپ -->
+<div id="appView" class="hidden">
+  <header class="topbar">
+    <div class="title">مدرسین تصدیق نظام</div>
+    <div class="who">
+      <span id="whoLabel"></span>
+      <button class="btn-light" id="logoutBtn">لاگ آؤٹ</button>
+    </div>
+  </header>
+
+  <nav class="tabs" id="tabs">
+    <button data-tab="entry" class="active">ڈیٹا انٹری</button>
+    <button data-tab="report" class="admin-only">رپورٹ</button>
+    <button data-tab="users" class="admin-only">یوزرز</button>
+    <button data-tab="log" class="admin-only">سرگرمی لاگ</button>
+    <button data-tab="settings" class="admin-only">سیٹنگز</button>
+  </nav>
+
+  <main>
+    <!-- ڈیٹا انٹری -->
+    <section id="tab-entry">
+      <div class="summary" id="miniSummary"></div>
+
+      <div class="toolbar">
+        <input type="text" id="fSearch" placeholder="نام، کوڈ یا ولدیت سے تلاش">
+        <select id="fProvince" class="admin-only"></select>
+        <select id="fDivision"></select>
+        <select id="fDistrict"></select>
+        <label class="admin-only entry-owner">انٹری دیکھیں <select id="entryUser"></select></label>
+        <select id="fStatus">
+          <option value="">تمام</option>
+          <option value="pending">باقی</option>
+          <option value="done">مکمل</option>
+        </select>
+        <span class="spacer"></span>
+        <button class="btn" id="exportBtn">ایکسل ایکسپورٹ</button>
+        <label class="btn admin-only" for="importFile">امپورٹ (ایکسل / JSON)</label>
+        <input type="file" id="importFile" accept=".xlsx,.xls,.csv,.json" hidden>
+        <button class="btn-light admin-only" id="templateBtn">خالی فارم</button>
+      </div>
+
+      <div class="table-wrap">
+        <table id="dataTable">
+          <thead>
+            <tr>
+              <th>#</th>
+              <th>عملہ کوڈ</th>
+              <th>نام</th>
+              <th>ولدیت</th>
+              <th>شاخ</th>
+              <th>ذمہ داری</th>
+              <th>ڈسٹرکٹ</th>
+              <th>ڈویژن</th>
+              <th class="admin-only">صوبہ</th>
+              <th>آفیشل منٹ</th>
+              <th>گریڈ</th>
+              <th>اجارے کے منٹ</th>
+              <th>کیا حقیقتاً حفظ کا درجہ پڑھا رہے ہیں؟</th>
+              <th>کیا حقیقتاً ناظرہ کا درجہ پڑھا رہے ہیں؟</th>
+            </tr>
+          </thead>
+          <tbody></tbody>
+        </table>
+      </div>
+      <div class="pager" id="pager"></div>
+    </section>
+
+    <!-- رپورٹ -->
+    <section id="tab-report" class="hidden">
+      <h2>صوبہ وار رپورٹ</h2>
+      <div class="table-wrap"><table id="repProvince"></table></div>
+      <h2>ڈویژن وار رپورٹ</h2>
+      <div class="table-wrap"><table id="repDivision"></table></div>
+      <h2>ڈسٹرکٹ وار رپورٹ</h2>
+      <div class="table-wrap"><table id="repDistrict"></table></div>
+    </section>
+
+    <!-- یوزرز -->
+    <section id="tab-users" class="hidden">
+      <div class="toolbar">
+        <h2 style="margin:0">یوزرز</h2>
+        <span class="spacer"></span>
+        <button class="btn" id="addUserBtn">نیا یوزر</button>
+      </div>
+      <div class="table-wrap"><table id="userTable"></table></div>
+      <p class="note">یوزر صرف ایڈمن کے اسائن کیے ہوئے صوبوں/ڈویژنز کے مدرسین دیکھے گا۔ ایک ہی علاقہ دوسرے یوزر کو بھی اسائن ہو تو بنیادی ریکارڈ دونوں کو نظر آئے گا، مگر ہر یوزر کی انٹری الگ اور دوسرے یوزرز سے مخفی رہے گی۔ ایڈمن تمام انٹریاں دیکھ سکتا ہے۔</p>
+    </section>
+
+    <!-- لاگ -->
+    <section id="tab-log" class="hidden">
+      <h2>آخری 300 سرگرمیاں</h2>
+      <div class="table-wrap"><table id="logTable"></table></div>
+    </section>
+
+    <!-- سیٹنگز -->
+    <section id="tab-settings" class="hidden">
+      <h2>ایڈمن کا نام اور پاس ورڈ</h2>
+      <form id="adminForm" class="form-grid" autocomplete="off">
+        <label>موجودہ پاس ورڈ<input type="password" id="aCur" required autocomplete="current-password"></label>
+        <label>نیا یوزر آئی ڈی<input type="text" id="aName" required></label>
+        <label>نیا پاس ورڈ (اختیاری)<input type="password" id="aNew" autocomplete="new-password"></label>
+        <label>نیا پاس ورڈ دوبارہ<input type="password" id="aNew2" autocomplete="new-password"></label>
+        <button class="btn" type="submit">محفوظ کریں</button>
+        <p id="adminMsg" class="err"></p>
+      </form>
+
+      <h2>بیک اپ</h2>
+      <div class="toolbar">
+        <button class="btn" id="backupBtn">بیک اپ ڈاؤن لوڈ</button>
+        <label class="btn-light" for="restoreFile">بیک اپ بحال کریں</label>
+        <input type="file" id="restoreFile" accept=".json" hidden>
+      </div>
+      <p class="note">بیک اپ میں تمام ریکارڈ اور یوزرز کی انٹریاں شامل ہوتی ہیں۔ اسے محفوظ رکھیں اور کسی کے ساتھ شیئر نہ کریں۔ یوزر اکاؤنٹس Firebase میں محفوظ رہتے ہیں۔</p>
+    </section>
+  </main>
+</div>
+
+<!-- یوزر ڈائیلاگ -->
+<dialog id="userDlg">
+  <form id="userForm" autocomplete="off">
+    <h3 id="userDlgTitle">نیا یوزر</h3>
+    <label>یوزر آئی ڈی<input type="text" id="uName" required maxlength="30"></label>
+    <label id="uPassLabel">پاس ورڈ<input type="password" id="uPass" autocomplete="new-password"></label>
+    <label>کردار
+      <select id="uRole"><option value="user">یوزر</option><option value="admin">ایڈمن</option></select>
+    </label>
+    <div id="scopeBox">
+      <div>صوبے منتخب کریں؛ پورے صوبے کے لیے ڈویژن خالی چھوڑیں</div>
+      <div id="uScopeSelections" class="scope-checks"></div>
+    </div>
+    <label class="inline"><input type="checkbox" id="uActive" checked> اکاؤنٹ فعال ہے</label>
+    <p id="userErr" class="err"></p>
+    <div class="dlg-actions">
+      <button type="submit" class="btn">محفوظ کریں</button>
+      <button type="button" class="btn-light" id="userCancel">منسوخ</button>
+    </div>
+  </form>
+</dialog>
+
+<script src="xlsx.full.min.js"></script>
+<script type="module" src="app.js"></script>
+</body>
+</html>

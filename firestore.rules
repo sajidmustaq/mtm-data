@@ -1,0 +1,63 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function signedIn() {
+      return request.auth != null;
+    }
+
+    function userPath() {
+      return /databases/$(database)/documents/users/$(request.auth.uid);
+    }
+
+    function activeUser() {
+      return signedIn() && exists(userPath()) && get(userPath()).data.active == true;
+    }
+
+    function isAdmin() {
+      return activeUser() && get(userPath()).data.role == "admin";
+    }
+
+    match /users/{userId} {
+      allow get: if activeUser() && (request.auth.uid == userId || isAdmin());
+      allow list: if isAdmin();
+      allow create, update, delete: if false;
+    }
+
+    match /records/{recordId} {
+      allow read: if isAdmin() ||
+        (activeUser() && request.auth.uid in resource.data.assignedTo);
+      allow create, update, delete: if isAdmin();
+    }
+
+    match /entries/{entryId} {
+      function canWriteOwnEntry() {
+        return activeUser() &&
+          request.resource.data.userId == request.auth.uid &&
+          request.resource.data.recordId is string &&
+          request.resource.data.keys().hasOnly([
+            "recordId", "userId", "کیا یہ مدرس حقیتا حفظ کا درجہ بڑھا رہے ہیں",
+            "کیا یہ حقیقتا ناظرہ کا درجہ  پڑھا رہےہیں", "updatedBy", "updatedAt"
+          ]) &&
+          request.resource.data.keys().hasAll(["recordId", "userId"]) &&
+          exists(/databases/$(database)/documents/records/$(request.resource.data.recordId)) &&
+          request.auth.uid in get(
+            /databases/$(database)/documents/records/$(request.resource.data.recordId)
+          ).data.assignedTo;
+      }
+
+      allow read: if isAdmin() ||
+        (activeUser() && resource.data.userId == request.auth.uid);
+      allow create, update: if isAdmin() || canWriteOwnEntry();
+      allow delete: if isAdmin();
+    }
+
+    match /logs/{logId} {
+      allow read: if isAdmin();
+      allow create: if activeUser() &&
+        request.resource.data.uid == request.auth.uid &&
+        request.resource.data.username is string &&
+        request.resource.data.action is string;
+      allow update, delete: if false;
+    }
+  }
+}
