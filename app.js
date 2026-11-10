@@ -2,8 +2,8 @@
 
 import { initializeApp } from "https://www.gstatic.com/firebasejs/13.2.0/firebase-app.js";
 import {
-  browserSessionPersistence, EmailAuthProvider, getAuth, onAuthStateChanged,
-  reauthenticateWithCredential, setPersistence, signInWithEmailAndPassword, signOut, updatePassword
+  browserSessionPersistence, EmailAuthProvider, initializeAuth, onAuthStateChanged,
+  reauthenticateWithCredential, signInWithEmailAndPassword, signOut, updatePassword
 } from "https://www.gstatic.com/firebasejs/13.2.0/firebase-auth.js";
 import {
   addDoc, collection, doc, getDoc, getDocs, getFirestore, limit, onSnapshot, orderBy, query,
@@ -20,7 +20,7 @@ const firebaseConfig = {
   appId: "1:649943045136:web:e5504c105dcfd3cd152695"
 };
 const app = initializeApp(firebaseConfig);
-const auth = getAuth(app);
+const auth = initializeAuth(app, { persistence: browserSessionPersistence });
 const db = getFirestore(app);
 const functions = getFunctions(app, "us-central1");
 const manageUser = httpsCallable(functions, "manageUser");
@@ -156,8 +156,8 @@ function returnToLogin(message = "") {
   showError(message);
 }
 
-const authReady = setPersistence(auth, browserSessionPersistence);
-authReady.then(() => onAuthStateChanged(auth, async account => {
+
+onAuthStateChanged(auth, async account => {
   if (!account) {
     returnToLogin();
     return;
@@ -175,7 +175,7 @@ authReady.then(() => onAuthStateChanged(auth, async account => {
     await signOut(auth);
     returnToLogin(`اکاؤنٹ کی معلومات نہیں مل سکیں: ${error.message}`);
   }
-})).catch(error => showError(`Firebase لاگ اِن تیار نہیں: ${error.message}`));
+}, error => showError(`Firebase لاگ اِن تیار نہیں: ${error.message}`));
 
 $("loginForm").addEventListener("submit", async event => {
   event.preventDefault();
@@ -186,7 +186,7 @@ $("loginForm").addEventListener("submit", async event => {
   $("lBtn").disabled = true;
   showError("");
   try {
-    await authReady;
+    await auth.authStateReady();
     await signInWithEmailAndPassword(auth, userEmail(username), password);
     $("lPass").value = "";
   } catch (error) {

@@ -3,9 +3,10 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://www.gstatic.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src 'self' data:; connect-src 'self' https://*.googleapis.com https://*.firebaseio.com https://*.firebaseapp.com https://*.cloudfunctions.net wss://*.firebaseio.com; frame-src 'self' https://mtm-data.firebaseapp.com; object-src 'none'; base-uri 'none'; form-action 'self'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://www.gstatic.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src 'self' data:; connect-src 'self' https://www.gstatic.com https://*.googleapis.com https://*.firebaseio.com https://*.firebaseapp.com https://*.cloudfunctions.net wss://*.firebaseio.com; frame-src 'self' https://mtm-data.firebaseapp.com; object-src 'none'; base-uri 'none'; form-action 'self'">
 <meta name="referrer" content="strict-origin-when-cross-origin">
 <title>مدرسین تصدیق نظام</title>
+<link rel="icon" href="data:,">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Noto+Naskh+Arabic:wght@400;600;700&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="style.css">
@@ -123,8 +124,8 @@
     <section id="tab-settings" class="hidden">
       <h2>ایڈمن کا نام اور پاس ورڈ</h2>
       <form id="adminForm" class="form-grid" autocomplete="off">
+        <label>نیا یوزر آئی ڈی<input type="text" id="aName" autocomplete="username" required></label>
         <label>موجودہ پاس ورڈ<input type="password" id="aCur" required autocomplete="current-password"></label>
-        <label>نیا یوزر آئی ڈی<input type="text" id="aName" required></label>
         <label>نیا پاس ورڈ (اختیاری)<input type="password" id="aNew" autocomplete="new-password"></label>
         <label>نیا پاس ورڈ دوبارہ<input type="password" id="aNew2" autocomplete="new-password"></label>
         <button class="btn" type="submit">محفوظ کریں</button>
@@ -146,7 +147,7 @@
 <dialog id="userDlg">
   <form id="userForm" autocomplete="off">
     <h3 id="userDlgTitle">نیا یوزر</h3>
-    <label>یوزر آئی ڈی<input type="text" id="uName" required maxlength="30"></label>
+    <label>یوزر آئی ڈی<input type="text" id="uName" autocomplete="username" required maxlength="30"></label>
     <label id="uPassLabel">پاس ورڈ<input type="password" id="uPass" autocomplete="new-password"></label>
     <label>کردار
       <select id="uRole"><option value="user">یوزر</option><option value="admin">ایڈمن</option></select>
