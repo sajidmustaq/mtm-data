@@ -70,6 +70,11 @@ function assignmentsForUser(user) {
   return Array.isArray(user.assignments) ? user.assignments : [];
 }
 
+function normalizeRole(role) {
+  const normalized = typeof role === "string" ? role.trim().toLowerCase() : "";
+  return normalized === "admin" || normalized === "user" ? normalized : "";
+}
+
 function hasRegion(user, row) {
   if (user.role === "admin") return true;
   return assignmentsForUser(user).some(a => a.province === row[K.province] &&
@@ -89,6 +94,9 @@ function entryFor(record, ownerId = entryOwnerId()) {
 }
 
 function saveLog(action, detail = "") {
+  if (!me?.id || !me?.username || !action) {
+    return Promise.reject(new Error("لاگ اِن پروفائل میں یوزر آئی ڈی موجود نہیں؛ Firebase users document درست کریں۔"));
+  }
   return addDoc(collection(db, "logs"), {
     uid: me.id, username: me.username, action, detail, createdAt: serverTimestamp(), time: nowStr()
   });
@@ -112,7 +120,14 @@ function showApp(user) {
   document.querySelectorAll(".admin-only").forEach(el => el.classList.toggle("hidden", user.role !== "admin"));
   if (user.role === "admin") {
     unsubscribers.push(onSnapshot(collection(db, "users"), snap => {
-      USERS = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+      USERS = snap.docs.map(d => {
+        const profile = d.data();
+        return {
+          id: d.id, ...profile,
+          role: normalizeRole(profile.role),
+          username: profile.username || (d.id === me.id ? me.username : profile.usernameKey || "")
+        };
+      });
       usersLoaded = true;
       fillEntryUsers();
       refreshAll();
@@ -175,7 +190,18 @@ onAuthStateChanged(auth, async account => {
       returnToLogin("یہ اکاؤنٹ غیر فعال ہے یا ایڈمن نے ابھی بنایا نہیں۔");
       return;
     }
-    showApp({ id: account.uid, ...snapshot.data() });
+    const profile = snapshot.data();
+    const role = normalizeRole(profile.role);
+    if (!role) {
+      throw new Error(`Firestore میں users/${account.uid} کے role کی ویلیو "${profile.role ?? "خالی"}" ہے۔ اسے lowercase string "admin" یا "user" کریں۔`);
+    }
+    const username = typeof profile.username === "string" && profile.username.trim()
+      ? profile.username.trim()
+      : account.email?.endsWith("@mtm-data.firebaseapp.com")
+        ? account.email.slice(0, account.email.indexOf("@"))
+        : "";
+    if (!username) throw new Error("یوزر پروفائل میں username موجود نہیں، اور Authentication اکاؤنٹ میں قابلِ شناخت یوزر آئی ڈی نہیں۔");
+    showApp({ id: account.uid, ...profile, username, role });
     saveLog("لاگ اِن").catch(error => reportError("لاگ اِن لاگ محفوظ نہیں ہوا", error));
   } catch (error) {
     await signOut(auth);

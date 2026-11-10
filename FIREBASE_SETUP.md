@@ -16,6 +16,7 @@ The app is static-hosted, but login, user management, assigned records, and entr
    - `active` (boolean): `true`
    - `assignments` (array): empty
    - `createdAt` (string): current ISO date/time
+   - Use the Authentication user's exact UID as the Firestore document ID. `role` must be a string with the exact value `admin` (lowercase); an Authentication custom claim or a different document's role does not grant admin access.
 4. Add the GitHub Pages hostname (for example, `yourname.github.io`) to **Authentication → Settings → Authorized domains**.
 5. Enable the Firebase **Blaze** plan for Cloud Functions. Set a budget alert in Google Cloud Billing.
 6. Cloud Functions are configured for Node.js 22. Install Firebase CLI, sign in, install the Functions dependencies, and deploy the rules and functions from this folder:

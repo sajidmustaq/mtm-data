@@ -23,6 +23,17 @@ function validateUsername(username) {
   }
 }
 
+function normalizeRole(role) {
+  if (typeof role !== "string") {
+    throw new HttpsError("invalid-argument", "کردار admin یا user ہونا چاہیے۔");
+  }
+  const normalized = role.trim().toLowerCase();
+  if (!["admin", "user"].includes(normalized)) {
+    throw new HttpsError("invalid-argument", "کردار admin یا user ہونا چاہیے۔");
+  }
+  return normalized;
+}
+
 function validatePassword(password, username) {
   if (typeof password !== "string" || password.length < 8 ||
       !/[A-Za-z]/.test(password) || !/\d/.test(password) ||
@@ -109,7 +120,7 @@ exports.manageUser = onCall(async request => {
   if (action === "create") {
     const username = String(request.data.username || "").trim();
     const usernameKey = username.toLowerCase();
-    const role = request.data.role === "admin" ? "admin" : "user";
+    const role = normalizeRole(request.data.role);
     validateUsername(username);
     validatePassword(request.data.password, username);
     const assignments = validateAssignments(request.data.assignments, role);
@@ -167,7 +178,7 @@ exports.manageUser = onCall(async request => {
   if (!snapshot.exists) throw new HttpsError("not-found", "یوزر نہیں ملا۔");
   const old = snapshot.data();
   const username = String(request.data.username || "").trim();
-  const role = request.data.role === "admin" ? "admin" : "user";
+  const role = normalizeRole(request.data.role);
   const active = request.data.active !== false;
   validateUsername(username);
   const assignments = validateAssignments(request.data.assignments, role);
