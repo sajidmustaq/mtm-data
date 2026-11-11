@@ -54,6 +54,7 @@ const K = {
   nazra: "کیا یہ حقیقتا ناظرہ کا درجہ  پڑھا رہےہیں"
 };
 const COLS = Object.values(K);
+const ADMIN_ONLY_COLS = [K.branch, K.offMin, K.grade, K.ijaraMin];
 const EXTRA_COLS = ["آخری تبدیلی از", "آخری تبدیلی کا وقت"];
 const $ = id => document.getElementById(id);
 const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({
@@ -191,7 +192,7 @@ function rowFromDocData(id, raw) {
   const isAdmin = me?.role === "admin";
   const normalized = {};
   COLS.forEach(col => {
-    if (!isAdmin && [K.offMin, K.grade, K.ijaraMin].includes(col)) return;
+    if (!isAdmin && ADMIN_ONLY_COLS.includes(col)) return;
     if (byNfcKey[nfc(col)] !== undefined) normalized[col] = byNfcKey[nfc(col)];
   });
   return { id, ...normalized, assignedTo: raw?.assignedTo || [] };
@@ -274,6 +275,7 @@ function showApp(user) {
   const scope = user.role === "admin" ? "ایڈمن" :
     assignments.map(a => `${a.province}${a.divisions?.length ? ` (${a.divisions.join("، ")})` : ""}`).join("، ");
   $("whoLabel").textContent = `${user.username} (${scope || "کوئی علاقہ اسائن نہیں"})`;
+  $("fSearch").placeholder = user.role === "admin" ? "Search name, code, father, branch" : "Search name, code, father";
   document.querySelectorAll(".admin-only").forEach(el => el.classList.toggle("hidden", user.role !== "admin"));
   if (user.role === "admin") {
     unsubscribers.push(onSnapshot(collection(db, "users"), snap => {
@@ -596,19 +598,24 @@ function fillFilters() {
   const selDists = multiFilters.district.getSelected();
   if (selDists.size) rows = rows.filter(r => selDists.has(r[K.district]));
 
-  multiFilters.branch.setOptions(unique(K.branch));
-  const selBranches = multiFilters.branch.getSelected();
-  if (selBranches.size) rows = rows.filter(r => selBranches.has(r[K.branch]));
+  if (!$("fBranch").classList.contains("hidden")) {
+    multiFilters.branch.setOptions(unique(K.branch));
+    const selBranches = multiFilters.branch.getSelected();
+    if (selBranches.size) rows = rows.filter(r => selBranches.has(r[K.branch]));
+  } else {
+    multiFilters.branch.clear(true);
+  }
 
   multiFilters.duty.setOptions(unique(K.duty));
 }
 
 function filteredRows() {
   const search = $("fSearch").value.trim().toLowerCase();
+  const isAdmin = me?.role === "admin";
   const selProvs = $("fProvince").classList.contains("hidden") ? new Set() : multiFilters.province.getSelected();
   const selDivs = multiFilters.division.getSelected();
   const selDists = multiFilters.district.getSelected();
-  const selBranches = multiFilters.branch.getSelected();
+  const selBranches = $("fBranch").classList.contains("hidden") ? new Set() : multiFilters.branch.getSelected();
   const selDuties = multiFilters.duty.getSelected();
   const status = $("fStatus").value;
   return visibleRows().filter(row => {
@@ -620,8 +627,10 @@ function filteredRows() {
     const entry = entryFor(row);
     if (status === "done" && !isDone(entry)) return false;
     if (status === "pending" && isDone(entry)) return false;
-    if (search && ![row[K.name], row[K.code], row[K.father], row[K.branch], row[K.duty]]
-      .some(v => String(v || "").toLowerCase().includes(search))) return false;
+    const searchFields = isAdmin
+      ? [row[K.name], row[K.code], row[K.father], row[K.branch], row[K.duty]]
+      : [row[K.name], row[K.code], row[K.father], row[K.duty]];
+    if (search && !searchFields.some(v => String(v || "").toLowerCase().includes(search))) return false;
     return true;
   });
 }
@@ -694,14 +703,14 @@ function renderTable() {
     return `<tr class="${isDone(saved) ? "done" : "pending"}">
       <td>${(page - 1) * PAGE_SIZE + i + 1}</td>
       <td>${esc(row[K.code])}</td><td>${esc(row[K.name])}</td><td>${esc(row[K.father])}</td>
-      <td>${esc(row[K.branch])}</td><td>${esc(row[K.duty])}</td><td>${esc(row[K.district])}</td>
+      ${isAdmin ? `<td>${esc(row[K.branch])}</td>` : ""}<td>${esc(row[K.duty])}</td><td>${esc(row[K.district])}</td>
       <td>${esc(row[K.division])}</td>${isAdmin ? `<td>${esc(row[K.province])}</td>` : ""}
       ${isAdmin ? `<td>${esc(row[K.offMin])}</td><td>${esc(row[K.grade])}</td><td>${esc(row[K.ijaraMin])}</td>` : ""}
       <td><select ${editable ? "" : "disabled"} class="${selClass(entry[K.hifz])}" data-id="${esc(row.id)}" data-f="hifz">${opts(entry[K.hifz])}</select></td>
       <td><select ${editable ? "" : "disabled"} class="${selClass(entry[K.nazra])}" data-id="${esc(row.id)}" data-f="nazra">${opts(entry[K.nazra])}</select></td>
       <td>${actionCell}</td>
     </tr>`;
-  }).join("") || `<tr><td colspan="${isAdmin ? 15 : 11}" class="center">کوئی ریکارڈ نہیں ملا</td></tr>`;
+  }).join("") || `<tr><td colspan="${isAdmin ? 15 : 10}" class="center">کوئی ریکارڈ نہیں ملا</td></tr>`;
   $("pager").innerHTML = `<button id="pPrev" ${page <= 1 ? "disabled" : ""}>پچھلا</button>
     <span>صفحہ ${page} / ${pages} &nbsp;(کل ${rows.length})</span>
     <button id="pNext" ${page >= pages ? "disabled" : ""}>اگلا</button>`;
@@ -921,7 +930,7 @@ $("exportBtn").addEventListener("click", () => {
   const ownerId = entryOwnerId();
   const exportCols = me.role === "admin"
     ? COLS
-    : COLS.filter(col => ![K.offMin, K.grade, K.ijaraMin].includes(col));
+    : COLS.filter(col => !ADMIN_ONLY_COLS.includes(col));
   const rows = filteredRows().map(row => {
     const entry = entryFor(row, ownerId) || {};
     const output = {};

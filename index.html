@@ -69,11 +69,11 @@
       </div>
 
       <div class="filter-bar">
-        <input type="text" id="fSearch" placeholder="Search name, code, father, branch">
+        <input type="text" id="fSearch" placeholder="Search name, code, father">
         <div id="fProvince" class="ms-wrap"></div>
         <div id="fDivision" class="ms-wrap"></div>
         <div id="fDistrict" class="ms-wrap"></div>
-        <div id="fBranch" class="ms-wrap"></div>
+        <div id="fBranch" class="ms-wrap admin-only"></div>
         <div id="fDuty" class="ms-wrap"></div>
         <label class="admin-only entry-owner">Entry Viewer: <select id="entryUser"></select></label>
         <select id="fStatus">
@@ -88,20 +88,20 @@
           <thead>
             <tr>
               <th>#</th>
-              <th>Staff Code</th>
-              <th>Name</th>
-              <th>Father Name</th>
-              <th>Branch</th>
-              <th>Duty</th>
-              <th>District</th>
-              <th>Division</th>
-              <th class="admin-only">Province</th>
-              <th class="admin-only">Official Min</th>
-              <th class="admin-only">Grade</th>
-              <th class="admin-only">Ijara Min</th>
-              <th>Teaching Hifz?</th>
-              <th>Teaching Nazra?</th>
-              <th>Action</th>
+              <th>عملہ کوڈ</th>
+              <th>نام</th>
+              <th>ولدیت</th>
+              <th class="admin-only">شاخ</th>
+              <th>ذمہ داری</th>
+              <th>ڈسٹرکٹ</th>
+              <th>ڈویژن</th>
+              <th class="admin-only">صوبہ</th>
+              <th class="admin-only">آفیشل منٹ</th>
+              <th class="admin-only">گریڈ</th>
+              <th class="admin-only">اجارے کے منٹ</th>
+              <th>حفظ کی تدریس؟</th>
+              <th>ناظرہ کی تدریس؟</th>
+              <th>عمل</th>
             </tr>
           </thead>
           <tbody></tbody>
@@ -220,6 +220,6 @@
 </div>
 
 <script src="xlsx.full.min.js"></script>
-<script type="module" src="app.js?v=20261111-v12"></script>
+<script type="module" src="app.js?v=20261111-v13"></script>
 </body>
 </html>
