@@ -9,7 +9,7 @@
 <link rel="icon" type="image/svg+xml" href="logo.svg?v=1">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Noto+Naskh+Arabic:wght@400;600;700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="style.css?v=20261111-v6">
+<link rel="stylesheet" href="style.css?v=20261111-v7">
 </head>
 <body>
 
@@ -26,9 +26,9 @@
   <form id="loginForm" class="login-box" autocomplete="off">
     <h1 class="login-brand"><img src="logo.svg?v=1" alt="MTM Data" class="brand-logo" width="32" height="32"><span>MTM Data</span></h1>
     <label for="lUser">User ID</label>
-    <input type="text" id="lUser" autocomplete="username" required>
+    <input type="text" id="lUser" autocomplete="username" dir="ltr" required>
     <label for="lPass">Password</label>
-    <input type="password" id="lPass" autocomplete="current-password" required>
+    <input type="password" id="lPass" autocomplete="current-password" dir="ltr" required>
     <label class="inline pw-show"><input type="checkbox" id="showPass"> Show Password</label>
     <button type="submit" class="btn" id="lBtn">Log In</button>
     <p id="loginErr" class="err"></p>
@@ -156,10 +156,10 @@
     <section id="tab-settings" class="hidden">
       <h2>Admin Password</h2>
       <form id="adminForm" class="form-grid" autocomplete="off">
-        <label>User ID<input type="text" id="aName" autocomplete="username" required></label>
-        <label>Current Password<input type="password" id="aCur" required autocomplete="current-password"></label>
-        <label>New Password<input type="password" id="aNew" autocomplete="new-password"></label>
-        <label>Confirm New Password<input type="password" id="aNew2" autocomplete="new-password"></label>
+        <label>User ID<input type="text" id="aName" autocomplete="username" dir="ltr" required></label>
+        <label>Current Password<input type="password" id="aCur" dir="ltr" required autocomplete="current-password"></label>
+        <label>New Password<input type="password" id="aNew" dir="ltr" autocomplete="new-password"></label>
+        <label>Confirm New Password<input type="password" id="aNew2" dir="ltr" autocomplete="new-password"></label>
         <button class="btn" type="submit">Save</button>
         <p id="adminMsg" class="err"></p>
       </form>
@@ -179,10 +179,10 @@
 <dialog id="userDlg">
   <form id="userForm" autocomplete="off">
     <h3 id="userDlgTitle">Add User</h3>
-    <label>User ID<input type="text" id="uName" autocomplete="username" required maxlength="30"></label>
+    <label>User ID<input type="text" id="uName" autocomplete="username" dir="ltr" required maxlength="30"></label>
     <label id="uPassLabel">Password
-      <span class="pw-field">
-        <input type="password" id="uPass" autocomplete="new-password">
+      <span class="pw-field" dir="ltr">
+        <input type="password" id="uPass" autocomplete="new-password" dir="ltr">
         <button type="button" id="uPassToggle" class="pw-eye" aria-label="Show password" aria-pressed="false" title="Show/Hide password">
           <svg class="eye-open" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7-11-7-11-7z"/><circle cx="12" cy="12" r="3"/></svg>
           <svg class="eye-off hidden" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M17.94 17.94A10.94 10.94 0 0 1 12 19c-7 0-11-7-11-7a21.8 21.8 0 0 1 5.06-5.94M9.9 4.24A10.94 10.94 0 0 1 12 4c7 0 11 7 11 7a21.8 21.8 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"/><line x1="1" y1="1" x2="23" y2="23"/></svg>

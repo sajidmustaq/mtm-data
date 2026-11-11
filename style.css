@@ -259,8 +259,14 @@ tfoot td { font-weight: 700; background: #f7f8f5; }
 .form-grid { display: grid; gap: 10px; max-width: 420px; }
 .form-grid label, dialog label { display: block; }
 .form-grid input, dialog input[type=text], dialog input[type=password], dialog select { width: 100%; margin-top: 4px; }
-.pw-field { position: relative; display: block; margin-top: 4px; }
+.pw-field { position: relative; display: block; margin-top: 4px; direction: ltr; }
 .pw-field input[type=text], .pw-field input[type=password] { margin-top: 0; padding-inline-end: 38px; }
+#lUser, #lPass, #uName, #uPass, #aName, #aCur, #aNew, #aNew2 {
+  direction: ltr;
+  text-align: left;
+  unicode-bidi: isolate;
+  font-family: "Segoe UI", Tahoma, Arial, sans-serif;
+}
 .pw-eye {
   position: absolute;
   inset-inline-end: 6px;
