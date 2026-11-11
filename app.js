@@ -1,47 +1,36 @@
 "use strict";
 
-import { initializeApp } from "https://www.gstatic.com/firebasejs/13.2.0/firebase-app.js";
-import {
-  browserLocalPersistence, browserSessionPersistence, createUserWithEmailAndPassword,
-  EmailAuthProvider, indexedDBLocalPersistence, initializeAuth, inMemoryPersistence,
-  onAuthStateChanged, reauthenticateWithCredential, signInWithEmailAndPassword,
-  signOut, updatePassword
-} from "https://www.gstatic.com/firebasejs/13.2.0/firebase-auth.js";
-import {
-  addDoc, arrayRemove, arrayUnion, collection, deleteDoc, doc, getCountFromServer,
-  getDocFromCache, getDocFromServer, getDocs, getDocsFromCache, getDocsFromServer,
-  getFirestore, initializeFirestore, limit, onSnapshot, orderBy, persistentLocalCache,
-  persistentMultipleTabManager, query, serverTimestamp, setDoc, where, writeBatch
-} from "https://www.gstatic.com/firebasejs/13.2.0/firebase-firestore.js";
+import { createClient } from "https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm";
 
-const firebaseConfig = {
-  apiKey: "AIzaSyDfu50nkc3YrIw80QEwQP2Sqlx2Dpb1Wpk",
-  authDomain: "student-portal-5dd94.firebaseapp.com",
-  projectId: "student-portal-5dd94",
-  storageBucket: "student-portal-5dd94.firebasestorage.app",
-  messagingSenderId: "676699117940",
-  appId: "1:676699117940:web:790a46517353937f03b421"
-};
-const EMAIL_DOMAIN = "student-portal-5dd94.firebaseapp.com";
-const app = initializeApp(firebaseConfig);
-const auth = initializeAuth(app, {
-  persistence: [indexedDBLocalPersistence, browserLocalPersistence, browserSessionPersistence]
-});
-let db;
-try {
-  db = initializeFirestore(app, {
-    localCache: persistentLocalCache({ tabManager: persistentMultipleTabManager() })
-  });
-} catch {
-  db = getFirestore(app);
-}
-let creatorAuth = null;
-function getCreatorAuth() {
-  if (!creatorAuth) {
-    const creatorApp = initializeApp(firebaseConfig, "userCreator");
-    creatorAuth = initializeAuth(creatorApp, { persistence: inMemoryPersistence });
+const SUPABASE_URL = "https://pgmzlnwowwjlgwwkcfhr.supabase.co";
+const SUPABASE_KEY = "sb_publishable_M6jTob7-i3VlxJf6KQxoIQ_RF8KUVjO";
+const PROJECT_REF = "pgmzlnwowwjlgwwkcfhr";
+const EMAIL_DOMAIN = "mtm-data.app";
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+const supabase = createClient(SUPABASE_URL, SUPABASE_KEY, {
+  auth: {
+    persistSession: true,
+    autoRefreshToken: true,
+    detectSessionInUrl: false,
+    storageKey: `mtm_sb_auth_${PROJECT_REF}`
   }
-  return creatorAuth;
+});
+
+async function invokeManageUser(payload) {
+  const { data, error } = await supabase.functions.invoke("manage-user", { body: payload });
+  if (error) {
+    let msg = error.message || "Edge Function request failed";
+    try {
+      const body = await error.context?.json?.();
+      if (body?.error) msg = body.error;
+    } catch {}
+    const err = new Error(msg);
+    err.status = error.context?.status;
+    throw err;
+  }
+  if (data?.error) throw new Error(data.error);
+  return data;
 }
 const YES = "جی ہاں", NO = "جی نہیں", PAGE_SIZE = 50, IDLE_MS = 15 * 60 * 1000;
 const RECORD_CACHE_TTL_MS = 6 * 60 * 60 * 1000;
@@ -165,22 +154,143 @@ function entryFor(record, ownerId = entryOwnerId()) {
   return matches.find(e => e.submitted || isDone(e)) || matches[0];
 }
 
-function saveLog(action, detail = "") {
+async function saveLog(action, detail = "") {
   if (!me?.id || !me?.username || !action) {
-    return Promise.reject(new Error("لاگ اِن پروفائل میں یوزر آئی ڈی موجود نہیں؛ Firebase users document درست کریں۔"));
+    throw new Error("لاگ اِن پروفائل میں یوزر آئی ڈی موجود نہیں؛ users پروفائل درست کریں۔");
   }
-  return addDoc(collection(db, "logs"), {
-    uid: me.id, username: me.username, action, detail, createdAt: serverTimestamp(), time: nowStr()
-  });
+  const row = { uid: me.id, username: me.username, action, detail, time: nowStr() };
+  const { error } = await supabase.from("logs").insert(row);
+  if (error) throw error;
 }
 
 function stopListeners() {
-  unsubscribers.forEach(unsubscribe => unsubscribe());
+  unsubscribers.forEach(unsubscribe => {
+    try { unsubscribe(); } catch {}
+  });
   unsubscribers = [];
 }
 
 function syncStorageKey(userId) {
-  return `mtm_rec_sync_${firebaseConfig.projectId}_${userId}`;
+  return `mtm_sb_rec_sync_${PROJECT_REF}_${userId}`;
+}
+
+function openCacheDb() {
+  return new Promise((resolve, reject) => {
+    if (typeof indexedDB === "undefined") { reject(new Error("No IndexedDB")); return; }
+    const req = indexedDB.open("mtm_sb_cache_v1", 1);
+    req.onupgradeneeded = () => {
+      const db = req.result;
+      if (!db.objectStoreNames.contains("records")) db.createObjectStore("records");
+    };
+    req.onsuccess = () => resolve(req.result);
+    req.onerror = () => reject(req.error);
+  });
+}
+
+async function cacheGet(key) {
+  try {
+    const db = await openCacheDb();
+    return await new Promise(resolve => {
+      const tx = db.transaction("records", "readonly");
+      const req = tx.objectStore("records").get(key);
+      req.onsuccess = () => { db.close(); resolve(req.result || null); };
+      req.onerror = () => { db.close(); resolve(null); };
+    });
+  } catch {
+    return null;
+  }
+}
+
+async function cachePut(key, docs) {
+  try {
+    const db = await openCacheDb();
+    await new Promise(resolve => {
+      const tx = db.transaction("records", "readwrite");
+      tx.objectStore("records").put(docs, key);
+      tx.oncomplete = () => { db.close(); resolve(); };
+      tx.onerror = () => { db.close(); resolve(); };
+    });
+  } catch {}
+}
+
+async function fetchAll(buildQuery, batchSize = 1000) {
+  const all = [];
+  for (let from = 0; ; from += batchSize) {
+    const { data, error } = await buildQuery(from, from + batchSize - 1);
+    if (error) throw error;
+    if (!data || !data.length) break;
+    all.push(...data);
+    if (data.length < batchSize) break;
+  }
+  return all;
+}
+
+function userFromDbRow(row) {
+  if (!row) return null;
+  return {
+    id: row.id,
+    username: row.username || row.username_key || "",
+    usernameKey: row.username_key || (row.username || "").toLowerCase(),
+    role: normalizeRole(row.role),
+    active: !!row.active,
+    assignments: Array.isArray(row.assignments) ? row.assignments : [],
+    createdAt: row.created_at || ""
+  };
+}
+
+function entryFromDb(row) {
+  return {
+    id: row.id,
+    recordId: row.record_id,
+    userId: row.user_id,
+    [K.hifz]: nfc(row.hifz),
+    [K.nazra]: nfc(row.nazra),
+    submitted: !!row.submitted,
+    submittedAt: row.submitted_at || "",
+    updatedBy: row.updated_by || "",
+    updatedAt: row.updated_at || ""
+  };
+}
+
+function upsertLocalEntry(entry) {
+  const idx = ENTRIES.findIndex(e => e.id === entry.id);
+  if (idx >= 0) ENTRIES[idx] = entry;
+  else ENTRIES.push(entry);
+}
+
+function removeLocalEntry(id) {
+  ENTRIES = ENTRIES.filter(e => e.id !== id);
+}
+
+function rawFromDbRecord(rec, priv = null) {
+  const data = {
+    [K.code]: nfc(rec.code),
+    [K.name]: nfc(rec.name),
+    [K.father]: nfc(rec.father),
+    [K.duty]: nfc(rec.duty),
+    [K.district]: nfc(rec.district),
+    [K.division]: nfc(rec.division),
+    [K.province]: nfc(rec.province),
+    [K.hifz]: "",
+    [K.nazra]: ""
+  };
+  if (priv) {
+    data[K.branch] = nfc(priv.branch);
+    data[K.offMin] = nfc(priv.off_min);
+    data[K.grade] = nfc(priv.grade);
+    data[K.ijaraMin] = nfc(priv.ijara_min);
+  }
+  return {
+    id: rec.id,
+    data,
+    province: nfc(rec.province),
+    division: nfc(rec.division),
+    district: nfc(rec.district),
+    assignedTo: Array.isArray(rec.assigned_to) ? rec.assigned_to : [],
+    sourceKey: nfc(rec.source_key),
+    updatedAt: rec.updated_at || "",
+    updatedAtMs: Number(rec.updated_at_ms || 0)
+  };
 }
 
 function rowFromDocData(id, raw) {
@@ -207,42 +317,71 @@ function applyRecordDocs() {
   refreshAll();
 }
 
+async function fetchPrivateMapForIds(ids) {
+  const map = new Map();
+  for (let i = 0; i < ids.length; i += 300) {
+    const chunk = ids.slice(i, i + 300);
+    const { data, error } = await supabase
+      .from("records_private")
+      .select("record_id, branch, off_min, grade, ijara_min")
+      .in("record_id", chunk);
+    if (error) throw error;
+    (data || []).forEach(p => map.set(p.record_id, p));
+  }
+  return map;
+}
+
 async function loadRecords(user, forceServer = false) {
   if (!user) return;
   recordsLoading = true;
   try {
-    const recordQuery = user.role === "admin"
-      ? collection(db, "records")
-      : query(collection(db, "records"), where("assignedTo", "array-contains", user.id));
+    const isAdmin = user.role === "admin";
     const key = syncStorageKey(user.id);
     const lastSyncMs = Number(localStorage.getItem(key) || 0);
 
     if (!forceServer && lastSyncMs > 0) {
       try {
-        const cachedSnap = await getDocsFromCache(recordQuery);
+        const cachedDocs = await cacheGet(key);
         if (!me || me.id !== user.id) return;
-        if (!cachedSnap.empty) {
-          RECORD_DOCS = new Map(cachedSnap.docs.map(d => [d.id, { id: d.id, ...d.data() }]));
+        if (Array.isArray(cachedDocs) && cachedDocs.length) {
+          RECORD_DOCS = new Map(cachedDocs.map(d => [d.id, d]));
           recordsLoading = false;
           applyRecordDocs();
 
-          const countSnap = await getCountFromServer(recordQuery);
+          let countQuery = supabase.from("records").select("id", { count: "exact", head: true });
+          if (!isAdmin) countQuery = countQuery.contains("assigned_to", [user.id]);
+          const { count: serverCount, error: countErr } = await countQuery;
           if (!me || me.id !== user.id) return;
-          const serverCount = countSnap.data().count;
-          if (serverCount === cachedSnap.size) {
-            if (user.role === "admin") {
-              const deltaSnap = await getDocsFromServer(
-                query(collection(db, "records"), where("updatedAtMs", ">", lastSyncMs))
+          if (!countErr && serverCount === cachedDocs.length) {
+            if (isAdmin) {
+              const deltaRecs = await fetchAll((from, to) =>
+                supabase.from("records")
+                  .select("id, code, name, father, duty, district, division, province, assigned_to, source_key, updated_at, updated_at_ms")
+                  .gt("updated_at_ms", lastSyncMs)
+                  .order("id", { ascending: true })
+                  .range(from, to)
               );
               if (!me || me.id !== user.id) return;
-              if (!deltaSnap.empty) {
-                deltaSnap.docs.forEach(d => RECORD_DOCS.set(d.id, { id: d.id, ...d.data() }));
+              if (deltaRecs.length) {
+                const privMap = await fetchPrivateMapForIds(deltaRecs.map(r => r.id));
+                if (!me || me.id !== user.id) return;
+                deltaRecs.forEach(r => RECORD_DOCS.set(r.id, rawFromDbRecord(r, privMap.get(r.id))));
+                await cachePut(key, [...RECORD_DOCS.values()]);
                 applyRecordDocs();
               }
               localStorage.setItem(key, String(Math.max(0, Date.now() - 10000)));
               return;
             }
-            if (Date.now() - lastSyncMs < RECORD_CACHE_TTL_MS) {
+            const { data: latestRow } = await supabase
+              .from("records")
+              .select("updated_at_ms")
+              .contains("assigned_to", [user.id])
+              .order("updated_at_ms", { ascending: false })
+              .limit(1)
+              .maybeSingle();
+            if (!me || me.id !== user.id) return;
+            const maxServerMs = Number(latestRow?.updated_at_ms || 0);
+            if (maxServerMs <= lastSyncMs && Date.now() - lastSyncMs < RECORD_CACHE_TTL_MS) {
               return;
             }
           }
@@ -252,9 +391,28 @@ async function loadRecords(user, forceServer = false) {
       }
     }
 
-    const serverSnap = await withLoader("ریکارڈز لوڈ ہو رہے ہیں...", () => getDocsFromServer(recordQuery));
+    const [recRows, privRows] = await withLoader("ریکارڈز لوڈ ہو رہے ہیں...", async () => {
+      const recPromise = fetchAll((from, to) => {
+        let q = supabase.from("records")
+          .select("id, code, name, father, duty, district, division, province, assigned_to, source_key, updated_at, updated_at_ms");
+        if (!isAdmin) q = q.contains("assigned_to", [user.id]);
+        return q.order("id", { ascending: true }).range(from, to);
+      });
+      const privPromise = isAdmin
+        ? fetchAll((from, to) =>
+            supabase.from("records_private")
+              .select("record_id, branch, off_min, grade, ijara_min")
+              .order("record_id", { ascending: true })
+              .range(from, to)
+          )
+        : Promise.resolve([]);
+      return Promise.all([recPromise, privPromise]);
+    });
     if (!me || me.id !== user.id) return;
-    RECORD_DOCS = new Map(serverSnap.docs.map(d => [d.id, { id: d.id, ...d.data() }]));
+    const privMap = new Map(privRows.map(p => [p.record_id, p]));
+    const docs = recRows.map(r => rawFromDbRecord(r, privMap.get(r.id)));
+    RECORD_DOCS = new Map(docs.map(d => [d.id, d]));
+    await cachePut(key, docs);
     localStorage.setItem(key, String(Math.max(0, Date.now() - 10000)));
     recordsLoading = false;
     applyRecordDocs();
@@ -264,6 +422,7 @@ async function loadRecords(user, forceServer = false) {
 }
 
 function showApp(user) {
+  stopListeners();
   me = user;
   lastActive = Date.now();
   loggingOut = false;
@@ -277,42 +436,119 @@ function showApp(user) {
   $("whoLabel").textContent = `${user.username} (${scope || "کوئی علاقہ اسائن نہیں"})`;
   $("fSearch").placeholder = user.role === "admin" ? "Search name, code, father, branch" : "Search name, code, father";
   document.querySelectorAll(".admin-only").forEach(el => el.classList.toggle("hidden", user.role !== "admin"));
-  if (user.role === "admin") {
-    unsubscribers.push(onSnapshot(collection(db, "users"), snap => {
-      USERS = snap.docs.map(d => {
-        const profile = d.data();
-        return {
-          id: d.id, ...profile,
-          role: normalizeRole(profile.role),
-          username: profile.username || (d.id === me.id ? me.username : profile.usernameKey || "")
-        };
-      });
-      usersLoaded = true;
+
+  const isAdmin = user.role === "admin";
+  if (isAdmin) {
+    supabase.from("users")
+      .select("id, username, username_key, role, active, assignments, created_at")
+      .order("created_at", { ascending: true })
+      .then(({ data, error }) => {
+        if (!me || me.id !== user.id) return;
+        if (error) { reportError("یوزرز لوڈ نہیں ہو سکے", error); return; }
+        USERS = (data || []).map(userFromDbRow);
+        usersLoaded = true;
+        fillEntryUsers();
+        fillReportUsers();
+        fillUserProvinceFilter();
+        refreshAll();
+        if (!$("tab-users").classList.contains("hidden")) renderUsers();
+        fillScopeChecks();
+      }, err => reportError("یوزرز لوڈ نہیں ہو سکے", err));
+    supabase.from("logs")
+      .select("id, uid, username, action, detail, time, created_at")
+      .order("created_at", { ascending: false })
+      .limit(300)
+      .then(({ data, error }) => {
+        if (!me || me.id !== user.id) return;
+        if (error) { reportError("سرگرمی لاگ لوڈ نہیں ہو سکا", error); return; }
+        LOG = data || [];
+        if (!$("tab-log").classList.contains("hidden")) renderLog();
+      }, err => reportError("سرگرمی لاگ لوڈ نہیں ہو سکا", err));
+  } else {
+    USERS = [user];
+    usersLoaded = true;
+  }
+
+  loadRecords(user).catch(err => reportError("ڈیٹا لوڈ نہیں ہو سکا", err));
+
+  fetchAll((from, to) => {
+    let q = supabase.from("entries")
+      .select("id, record_id, user_id, hifz, nazra, submitted, submitted_at, updated_by, updated_at");
+    if (!isAdmin) q = q.eq("user_id", user.id);
+    return q.order("id", { ascending: true }).range(from, to);
+  }).then(rows => {
+    if (!me || me.id !== user.id) return;
+    ENTRIES = rows.map(entryFromDb);
+    entriesLoaded = true;
+    refreshAll();
+  }).catch(err => reportError("انٹریاں لوڈ نہیں ہو سکیں", err));
+
+  const channel = supabase.channel(`mtm-live-${user.id}`);
+  channel.on(
+    "postgres_changes",
+    isAdmin
+      ? { event: "*", schema: "public", table: "entries" }
+      : { event: "*", schema: "public", table: "entries", filter: `user_id=eq.${user.id}` },
+    payload => {
+      if (!me || me.id !== user.id) return;
+      if (payload.eventType === "DELETE") {
+        if (payload.old?.id) removeLocalEntry(payload.old.id);
+      } else if (payload.new?.id) {
+        upsertLocalEntry(entryFromDb(payload.new));
+      }
+      refreshAll();
+    }
+  );
+
+  if (isAdmin) {
+    channel.on("postgres_changes", { event: "*", schema: "public", table: "users" }, payload => {
+      if (!me || me.id !== user.id) return;
+      if (payload.eventType === "DELETE") {
+        if (payload.old?.id) USERS = USERS.filter(u => u.id !== payload.old.id);
+      } else if (payload.new?.id) {
+        const mapped = userFromDbRow(payload.new);
+        const idx = USERS.findIndex(u => u.id === mapped.id);
+        if (idx >= 0) USERS[idx] = mapped;
+        else USERS.push(mapped);
+        if (mapped.id === me.id) me = { ...me, ...mapped };
+      }
       fillEntryUsers();
       fillReportUsers();
       fillUserProvinceFilter();
       refreshAll();
       if (!$("tab-users").classList.contains("hidden")) renderUsers();
       fillScopeChecks();
-    }, err => reportError("یوزرز لوڈ نہیں ہو سکے", err)));
-    unsubscribers.push(onSnapshot(query(collection(db, "logs"), orderBy("createdAt", "desc"), limit(300)), snap => {
-      LOG = snap.docs.map(d => d.data());
+    });
+    channel.on("postgres_changes", { event: "INSERT", schema: "public", table: "logs" }, payload => {
+      if (!me || me.id !== user.id || !payload.new) return;
+      LOG = [payload.new, ...LOG].slice(0, 300);
       if (!$("tab-log").classList.contains("hidden")) renderLog();
-    }, err => reportError("سرگرمی لاگ لوڈ نہیں ہو سکا", err)));
+    });
   } else {
-    USERS = [user];
-    usersLoaded = true;
+    channel.on(
+      "postgres_changes",
+      { event: "*", schema: "public", table: "users", filter: `id=eq.${user.id}` },
+      async payload => {
+        if (!me || me.id !== user.id) return;
+        const updated = payload.new ? userFromDbRow(payload.new) : null;
+        if (payload.eventType === "DELETE" || !updated || !updated.active) {
+          await supabase.auth.signOut().catch(() => {});
+          returnToLogin("یہ اکاؤنٹ غیر فعال یا حذف کر دیا گیا ہے۔");
+          return;
+        }
+        me = { ...me, ...updated };
+        USERS = [me];
+        const scopeText = assignmentsForUser(me)
+          .map(a => `${a.province}${a.divisions?.length ? ` (${a.divisions.join("، ")})` : ""}`).join("، ");
+        $("whoLabel").textContent = `${me.username} (${scopeText || "کوئی علاقہ اسائن نہیں"})`;
+        loadRecords(me, true).catch(err => reportError("ڈیٹا اپڈیٹ نہیں ہو سکا", err));
+      }
+    );
   }
-  loadRecords(user).catch(err => reportError("ڈیٹا لوڈ نہیں ہو سکا", err));
-  const entryQuery = user.role === "admin"
-    ? collection(db, "entries")
-    : query(collection(db, "entries"), where("userId", "==", user.id));
-  unsubscribers.push(onSnapshot(entryQuery, snap => {
-    ENTRIES = snap.docs.map(d => ({ id: d.id, ...d.data() }));
-    entriesLoaded = true;
-    refreshAll();
-  }, err => reportError("انٹریاں لوڈ نہیں ہو سکیں", err)));
-  if (user.role === "admin") fillEntryUsers();
+  channel.subscribe();
+  unsubscribers.push(() => { supabase.removeChannel(channel); });
+
+  if (isAdmin) fillEntryUsers();
   fillProvinceSelects();
   refreshAll();
 }
@@ -332,6 +568,7 @@ function resetAllFilters() {
 
 function returnToLogin(message = "") {
   stopListeners();
+  activeUid = null;
   me = null; DATA = []; USERS = []; ENTRIES = []; LOG = [];
   usersLoaded = false; entriesLoaded = false; loggingOut = false; recordsLoading = false; pendingScopeSelection = null;
   RECORD_DOCS.clear();
@@ -346,37 +583,40 @@ function returnToLogin(message = "") {
 }
 
 async function fetchUserProfile(uid) {
-  const userRef = doc(db, "users", uid);
-  try {
-    return await getDocFromServer(userRef);
-  } catch (error) {
-    if (error?.code === "unavailable" || /offline|network/i.test(String(error?.message || ""))) {
-      const cached = await getDocFromCache(userRef);
-      if (cached.exists()) return cached;
-    }
-    throw error;
-  }
+  const { data, error } = await supabase
+    .from("users")
+    .select("id, username, username_key, role, active, assignments, created_at")
+    .eq("id", uid)
+    .maybeSingle();
+  if (error) throw error;
+  return data;
 }
 
+let activeUid = null;
+let authChain = Promise.resolve();
 
-onAuthStateChanged(auth, async account => {
+async function handleAuthSession(session) {
+  const account = session?.user || null;
   if (!account) {
     returnToLogin();
     return;
   }
+  if (activeUid === account.id && me?.id === account.id) {
+    return;
+  }
+  activeUid = account.id;
   const showOverlay = $("bootView")?.classList.contains("hidden");
   if (showOverlay) showLoader("لاگ اِن کی تصدیق ہو رہی ہے...");
   try {
-    const snapshot = await fetchUserProfile(account.uid);
-    if (!snapshot.exists() || !snapshot.data().active) {
-      await signOut(auth);
+    const profile = await fetchUserProfile(account.id);
+    if (!profile || !profile.active) {
+      await supabase.auth.signOut().catch(() => {});
       returnToLogin("یہ اکاؤنٹ غیر فعال ہے یا ایڈمن نے ابھی بنایا نہیں۔");
       return;
     }
-    const profile = snapshot.data();
     const role = normalizeRole(profile.role);
     if (!role) {
-      throw new Error(`Firestore میں users/${account.uid} کے role کی ویلیو "${profile.role ?? "خالی"}" ہے۔ اسے lowercase string "admin" یا "user" کریں۔`);
+      throw new Error(`users پروفائل میں role کی ویلیو "${profile.role ?? "خالی"}" درست نہیں؛ "admin" یا "user" ہونی چاہیے۔`);
     }
     const username = typeof profile.username === "string" && profile.username.trim()
       ? profile.username.trim()
@@ -384,22 +624,31 @@ onAuthStateChanged(auth, async account => {
         ? account.email.slice(0, account.email.indexOf("@"))
         : "";
     if (!username) throw new Error("یوزر پروفائل میں username موجود نہیں، اور Authentication اکاؤنٹ میں قابلِ شناخت یوزر آئی ڈی نہیں۔");
-    showApp({ id: account.uid, ...profile, username, role });
+    const mapped = userFromDbRow({ ...profile, username, role });
+    showApp(mapped);
     saveLog("لاگ اِن").catch(error => reportError("لاگ اِن لاگ محفوظ نہیں ہوا", error));
   } catch (error) {
-    await signOut(auth);
-    const msg = error?.code === "permission-denied"
+    await supabase.auth.signOut().catch(() => {});
+    const msg = error?.code === "42501"
       ? "یہ اکاؤنٹ غیر فعال یا حذف کر دیا گیا ہے۔"
       : `اکاؤنٹ کی معلومات نہیں مل سکیں: ${error.message}`;
     returnToLogin(msg);
   } finally {
     if (showOverlay) hideLoader();
   }
-}, error => {
-  setButtonBusy($("lBtn"), false);
-  $("bootView")?.classList.add("hidden");
-  $("loginView").classList.remove("hidden");
-  showError(`Firebase لاگ اِن تیار نہیں: ${error.message}`);
+}
+
+supabase.auth.onAuthStateChange((event, session) => {
+  if (event === "TOKEN_REFRESHED" || event === "USER_UPDATED") return;
+  setTimeout(() => {
+    authChain = authChain.then(() => handleAuthSession(session)).catch(err => {
+      console.error("Auth error:", err);
+      setButtonBusy($("lBtn"), false);
+      $("bootView")?.classList.add("hidden");
+      $("loginView").classList.remove("hidden");
+      showError(`Supabase لاگ اِن تیار نہیں: ${err.message}`);
+    });
+  }, 0);
 });
 
 $("showPass").addEventListener("change", () => {
@@ -415,13 +664,17 @@ $("loginForm").addEventListener("submit", async event => {
   setButtonBusy($("lBtn"), true, "لاگ اِن ہو رہا ہے...");
   showError("");
   try {
-    await auth.authStateReady();
-    await signInWithEmailAndPassword(auth, userEmail(username), password);
+    const { error } = await supabase.auth.signInWithPassword({
+      email: userEmail(username),
+      password
+    });
+    if (error) throw error;
     $("lPass").value = "";
     resetLoginPassword();
   } catch (error) {
     setButtonBusy($("lBtn"), false);
-    showError(error.code === "auth/too-many-requests"
+    const msg = String(error?.message || "");
+    showError(error?.status === 429 || /rate limit|too many/i.test(msg)
       ? "بہت سی ناکام کوششیں؛ کچھ دیر بعد دوبارہ کوشش کریں۔"
       : "یوزر آئی ڈی یا پاس ورڈ درست نہیں۔");
   }
@@ -431,7 +684,8 @@ $("logoutBtn").addEventListener("click", async () => {
   try {
     await withLoader("لاگ آؤٹ ہو رہا ہے...", async () => {
       await saveLog("لاگ آؤٹ");
-      await signOut(auth);
+      const { error } = await supabase.auth.signOut();
+      if (error) throw error;
     });
   } catch (error) {
     reportError("لاگ آؤٹ مکمل نہیں ہو سکا", error);
@@ -447,7 +701,7 @@ setInterval(async () => {
   try { await saveLog("خودکار لاگ آؤٹ (خاموشی)"); }
   catch (error) { console.error("Could not save automatic logout log", error); }
   try {
-    await signOut(auth);
+    await supabase.auth.signOut();
     alert("خاموشی کی وجہ سے آپ کو لاگ آؤٹ کر دیا گیا ہے۔");
   } catch (error) {
     loggingOut = false;
@@ -854,12 +1108,29 @@ $("dataTable").addEventListener("click", async event => {
   try {
     await withLoader(isClearing ? "انٹری ختم کی جا رہی ہے..." : "ڈیٹا محفوظ ہو رہا ہے...", async () => {
       if (isClearing) {
-        await deleteDoc(doc(db, "entries", entryDocId));
+        const { error } = await supabase.from("entries").delete().eq("id", entryDocId);
+        if (error) throw error;
+        removeLocalEntry(entryDocId);
       } else {
-        await setDoc(doc(db, "entries", entryDocId), entry);
+        const dbEntry = {
+          id: entryDocId,
+          record_id: row.id,
+          user_id: targetUserId,
+          hifz: draft[K.hifz],
+          nazra: draft[K.nazra],
+          submitted: isDone(draft),
+          submitted_at: isDone(draft) ? (saved.submittedAt || now) : "",
+          updated_by: me.username,
+          updated_at: now
+        };
+        const { error } = await supabase.from("entries").upsert(dbEntry, { onConflict: "id" });
+        if (error) throw error;
+        upsertLocalEntry(entryFromDb(dbEntry));
       }
       DRAFT_ENTRIES.delete(row.id);
     });
+    setButtonBusy(button, false);
+    refreshAll();
     const logAction = isClearing ? "انٹری ختم" : (isUpdate ? "انٹری اپڈیٹ" : "انٹری جمع");
     const logDetail = isClearing
       ? `${row[K.code]} — انٹری خالی کر دی گئی`
@@ -973,9 +1244,40 @@ function userCanSeeRegion(user, row) {
 
 function buildRecordPayload(row, updatedAt, updatedAtMs) {
   const assignedTo = USERS.filter(user => user.active && userCanSeeRegion(user, row)).map(user => user.id);
+  const id = recordId(row);
   return {
-    data: row, province: row[K.province], division: row[K.division], district: row[K.district],
-    assignedTo, sourceKey: `${row[K.code]}|${row[K.province]}`, updatedAt, updatedAtMs
+    recRow: {
+      id,
+      code: row[K.code],
+      name: row[K.name] || "",
+      father: row[K.father] || "",
+      duty: row[K.duty] || "",
+      district: row[K.district] || "",
+      division: row[K.division] || "",
+      province: row[K.province],
+      assigned_to: assignedTo,
+      source_key: `${row[K.code]}|${row[K.province]}`,
+      updated_at: updatedAt,
+      updated_at_ms: updatedAtMs
+    },
+    privRow: {
+      record_id: id,
+      branch: row[K.branch] || "",
+      off_min: row[K.offMin] || "",
+      grade: row[K.grade] || "",
+      ijara_min: row[K.ijaraMin] || ""
+    },
+    docPayload: {
+      id,
+      data: row,
+      province: row[K.province],
+      division: row[K.division],
+      district: row[K.district],
+      assignedTo,
+      sourceKey: `${row[K.code]}|${row[K.province]}`,
+      updatedAt,
+      updatedAtMs
+    }
   };
 }
 
@@ -992,15 +1294,21 @@ async function uploadRecords(inputRows, sourceName) {
   const entries = [...normalized.entries()];
   const updatedAt = nowStr(), updatedAtMs = Date.now();
   for (let offset = 0; offset < entries.length; offset += 400) {
-    const batch = writeBatch(db);
-    entries.slice(offset, offset + 400).forEach(([id, row]) => {
-      const payload = buildRecordPayload(row, updatedAt, updatedAtMs);
-      batch.set(doc(db, "records", id), payload, { merge: true });
+    const chunk = entries.slice(offset, offset + 400);
+    const recRows = [], privRows = [];
+    chunk.forEach(([id, row]) => {
+      const built = buildRecordPayload(row, updatedAt, updatedAtMs);
+      recRows.push(built.recRow);
+      privRows.push(built.privRow);
       const prev = RECORD_DOCS.get(id) || {};
-      RECORD_DOCS.set(id, { ...prev, id, ...payload });
+      RECORD_DOCS.set(id, { ...prev, ...built.docPayload });
     });
-    await batch.commit();
+    const { error: recErr } = await supabase.from("records").upsert(recRows, { onConflict: "id" });
+    if (recErr) throw recErr;
+    const { error: privErr } = await supabase.from("records_private").upsert(privRows, { onConflict: "record_id" });
+    if (privErr) throw privErr;
   }
+  await cachePut(syncStorageKey(me.id), [...RECORD_DOCS.values()]);
   localStorage.setItem(syncStorageKey(me.id), String(Math.max(0, Date.now() - 10000)));
   applyRecordDocs();
   await saveLog("امپورٹ", `${sourceName}: ${entries.length} ریکارڈ، رد ${skipped}`);
@@ -1206,8 +1514,9 @@ function openUserDlg(user = null) {
   $("uName").disabled = !!user;
   $("uPass").value = "";
   $("uPass").required = !user;
-  $("uPass").disabled = !!user;
-  $("uPassLabel").classList.toggle("hidden", !!user);
+  $("uPass").disabled = false;
+  $("uPass").placeholder = user ? "Leave blank to keep existing" : "Min 8 chars (letters + digits)";
+  $("uPassLabel").classList.remove("hidden");
   $("uRole").value = user?.role || "user";
   $("uActive").checked = user ? !!user.active : true;
   $("userErr").textContent = "";
@@ -1224,34 +1533,27 @@ function otherActiveAdmins(exceptUid) {
   return USERS.filter(u => u.id !== exceptUid && u.role === "admin" && u.active).length;
 }
 
-async function syncRecordAssignmentsClient(uid, targetUser) {
-  if (!RECORD_DOCS.size) await loadRecords(me, false);
-  const updates = [];
+async function syncRecordAssignmentsClient(uid, targetUser, runRpc = true) {
+  if (runRpc) {
+    const { error } = await supabase.rpc("sync_user_assignments", { target_uid: uid });
+    if (error) throw error;
+  }
+  if (!RECORD_DOCS.size) return;
+  const nowMs = Date.now();
+  let changed = false;
   for (const [id, raw] of RECORD_DOCS.entries()) {
     const row = rowFromDocData(id, raw);
-    const hasUid = Array.isArray(raw.assignedTo) && raw.assignedTo.includes(uid);
+    const prev = Array.isArray(raw.assignedTo) ? raw.assignedTo : [];
+    const hasUid = prev.includes(uid);
     const shouldHave = !!(targetUser && targetUser.active && userCanSeeRegion(targetUser, row));
     if (hasUid !== shouldHave) {
-      updates.push({ id, raw, add: shouldHave });
+      raw.assignedTo = shouldHave ? [...new Set([...prev, uid])] : prev.filter(x => x !== uid);
+      raw.updatedAtMs = nowMs;
+      changed = true;
     }
   }
-  const nowMs = Date.now();
-  for (let offset = 0; offset < updates.length; offset += 400) {
-    const batch = writeBatch(db);
-    updates.slice(offset, offset + 400).forEach(item => {
-      batch.update(doc(db, "records", item.id), {
-        assignedTo: item.add ? arrayUnion(uid) : arrayRemove(uid),
-        updatedAtMs: nowMs
-      });
-      const prev = Array.isArray(item.raw.assignedTo) ? item.raw.assignedTo : [];
-      item.raw.assignedTo = item.add
-        ? [...new Set([...prev, uid])]
-        : prev.filter(x => x !== uid);
-      item.raw.updatedAtMs = nowMs;
-    });
-    await batch.commit();
-  }
-  if (updates.length) {
+  if (changed) {
+    await cachePut(syncStorageKey(me.id), [...RECORD_DOCS.values()]);
     localStorage.setItem(syncStorageKey(me.id), String(Math.max(0, Date.now() - 10000)));
     applyRecordDocs();
   }
@@ -1296,6 +1598,10 @@ $("userForm").addEventListener("submit", async event => {
     }
   } else {
     if (!oldUser) { error("یوزر نہیں ملا"); return; }
+    if (password) {
+      const problem = pwProblem(password, oldUser.username);
+      if (problem) { error(problem); return; }
+    }
     if (editingId === me.id && (role !== "admin" || !active)) {
       error("اپنا ایڈمن اکاؤنٹ بند یا کم درجہ نہیں کر سکتے۔");
       return;
@@ -1315,47 +1621,48 @@ $("userForm").addEventListener("submit", async event => {
   setButtonBusy(submit, true, "محفوظ ہو رہا ہے...");
   try {
     if (!editingId) {
-      const cAuth = getCreatorAuth();
-      const cred = await createUserWithEmailAndPassword(cAuth, userEmail(username), password);
-      const uid = cred.user.uid;
-      const profile = {
+      const res = await invokeManageUser({
+        action: "create",
         username,
-        usernameKey: username.toLowerCase(),
+        password,
         role,
         active,
-        assignments,
-        createdAt: new Date().toISOString()
-      };
-      try {
-        await setDoc(doc(db, "users", uid), profile);
-      } catch (writeErr) {
-        try { await cred.user.delete(); } catch {}
-        throw writeErr;
-      } finally {
-        try { await signOut(cAuth); } catch {}
+        assignments
+      });
+      const createdUser = userFromDbRow(res.user);
+      if (createdUser) {
+        const idx = USERS.findIndex(u => u.id === createdUser.id);
+        if (idx >= 0) USERS[idx] = createdUser;
+        else USERS.push(createdUser);
+        await syncRecordAssignmentsClient(createdUser.id, createdUser, false);
       }
-      await syncRecordAssignmentsClient(uid, profile);
     } else {
-      const nextProfile = {
-        username: oldUser.username,
-        usernameKey: (oldUser.usernameKey || oldUser.username).toLowerCase(),
-        role,
-        active,
-        assignments,
-        createdAt: oldUser.createdAt || new Date().toISOString()
-      };
-      await setDoc(doc(db, "users", editingId), nextProfile);
-      await syncRecordAssignmentsClient(editingId, nextProfile);
-      if (editingId === me.id) me = { ...me, ...nextProfile };
+      if (password) {
+        await invokeManageUser({ action: "reset_password", targetUid: editingId, password });
+      }
+      const { data: updatedRow, error: updErr } = await supabase
+        .from("users")
+        .update({ role, active, assignments })
+        .eq("id", editingId)
+        .select("id, username, username_key, role, active, assignments, created_at")
+        .single();
+      if (updErr) throw updErr;
+      const updatedUser = userFromDbRow(updatedRow);
+      const idx = USERS.findIndex(u => u.id === editingId);
+      if (idx >= 0) USERS[idx] = updatedUser;
+      await syncRecordAssignmentsClient(editingId, updatedUser, true);
+      if (editingId === me.id) me = { ...me, ...updatedUser };
     }
     await saveLog(editingId ? "یوزر ترمیم" : "نیا یوزر", `${username} — ${role}`);
     $("userDlg").close();
     renderUsers();
+    refreshAll();
   } catch (err) {
-    if (err?.code === "auth/email-already-in-use") {
-      error("یہ یوزر آئی ڈی پہلے سے Auth میں موجود ہے؛ دوسرا نام رکھیں یا admin_cli.mjs سے شامل کریں۔");
+    const msg = String(err?.message || "");
+    if (err?.status === 409 || /already exists|already registered/i.test(msg)) {
+      error("یہ یوزر آئی ڈی پہلے سے Auth میں موجود ہے؛ دوسرا نام رکھیں۔");
     } else {
-      error(err.message || "یوزر محفوظ نہیں ہو سکا");
+      error(msg || "یوزر محفوظ نہیں ہو سکا");
     }
   } finally {
     setButtonBusy(submit, false);
@@ -1373,12 +1680,16 @@ $("userTable").addEventListener("click", async event => {
       alert("کم از کم ایک فعال ایڈمن لازمی ہے۔");
       return;
     }
-    if (!confirm(`یوزر "${user.username}" کا رسائی ریکارڈ حذف کریں؟`)) return;
+    if (!confirm(`یوزر "${user.username}" کا اکاؤنٹ اور اس کی تمام انٹریاں مستقل طور پر حذف کریں؟`)) return;
     try {
       await withLoader("یوزر حذف ہو رہا ہے...", async () => {
-        await syncRecordAssignmentsClient(user.id, null);
-        await deleteDoc(doc(db, "users", user.id));
+        await invokeManageUser({ action: "delete", targetUid: user.id });
+        USERS = USERS.filter(u => u.id !== user.id);
+        ENTRIES = ENTRIES.filter(e => e.userId !== user.id);
+        await syncRecordAssignmentsClient(user.id, null, false);
         await saveLog("یوزر حذف", user.username);
+        renderUsers();
+        refreshAll();
       });
     } catch (error) {
       reportError("یوزر حذف نہیں ہو سکا", error);
@@ -1413,7 +1724,7 @@ $("adminForm").addEventListener("submit", async event => {
     return;
   }
   if (newUsername !== me.username) {
-    message("یوزر آئی ڈی بدلنے کے لیے admin_cli.mjs استعمال کریں؛ پاس ورڈ یہیں سے تبدیل ہو سکتا ہے۔", false);
+    message("یوزر آئی ڈی بدلنے کے لیے Supabase Dashboard یا supabase_admin_cli.mjs استعمال کریں؛ پاس ورڈ یہیں سے تبدیل ہو سکتا ہے۔", false);
     return;
   }
   if (!newPassword && !repeatPassword) {
@@ -1427,15 +1738,22 @@ $("adminForm").addEventListener("submit", async event => {
   setButtonBusy(submit, true, "محفوظ ہو رہا ہے...");
   try {
     await withLoader("پاس ورڈ تبدیل ہو رہا ہے...", async () => {
-      const credential = EmailAuthProvider.credential(userEmail(me.username), currentPassword);
-      await reauthenticateWithCredential(auth.currentUser, credential);
-      await updatePassword(auth.currentUser, newPassword);
+      const verifier = createClient(SUPABASE_URL, SUPABASE_KEY, {
+        auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false }
+      });
+      const { error: verifyErr } = await verifier.auth.signInWithPassword({
+        email: userEmail(me.username),
+        password: currentPassword
+      });
+      if (verifyErr) throw new Error("موجودہ پاس ورڈ غلط ہے");
+      const { error: updErr } = await supabase.auth.updateUser({ password: newPassword });
+      if (updErr) throw updErr;
       $("aCur").value = $("aNew").value = $("aNew2").value = "";
       message("پاس ورڈ تبدیل ہو گیا", true);
       await saveLog("ایڈمن پاس ورڈ تبدیل");
     });
   } catch (error) {
-    message(error.code === "auth/wrong-password" ? "موجودہ پاس ورڈ غلط ہے" : error.message, false);
+    message(error.message || "پاس ورڈ تبدیل نہیں ہو سکا", false);
   } finally {
     setButtonBusy(submit, false);
   }
@@ -1451,7 +1769,12 @@ $("backupBtn").addEventListener("click", async () => {
       const records = [...RECORD_DOCS.values()];
       const entries = entriesLoaded
         ? ENTRIES.map(entry => ({ ...entry }))
-        : (await getDocs(collection(db, "entries"))).docs.map(d => ({ id: d.id, ...d.data() }));
+        : (await fetchAll((from, to) =>
+            supabase.from("entries")
+              .select("id, record_id, user_id, hifz, nazra, submitted, submitted_at, updated_by, updated_at")
+              .order("id", { ascending: true })
+              .range(from, to)
+          )).map(entryFromDb);
       const backup = { version: 2, records, entries };
       const blob = new Blob([JSON.stringify(backup)], { type: "application/json" });
       const link = document.createElement("a");
@@ -1476,37 +1799,76 @@ $("restoreFile").addEventListener("change", event => {
   const reader = new FileReader();
   reader.onload = async loadEvent => {
     try {
-      const backup = JSON.parse(loadEvent.target.result);
-      if (!Array.isArray(backup.records) || !Array.isArray(backup.entries)) throw new Error("بیک اپ فائل درست نہیں");
+      const parsed = JSON.parse(loadEvent.target.result);
+      if (Array.isArray(parsed)) {
+        if (!confirm(`JSON فائل میں ${parsed.length} ریکارڈ ملے ہیں۔ امپورٹ کریں؟`)) return;
+        await withLoader("ڈیٹا امپورٹ ہو رہا ہے...", () => uploadRecords(parsed, file.name));
+        return;
+      }
+      const backup = parsed;
+      if (!Array.isArray(backup?.records) || !Array.isArray(backup?.entries)) {
+        throw new Error("بیک اپ فائل درست نہیں");
+      }
       if (!confirm(`ریکارڈ: ${backup.records.length}، انٹریاں: ${backup.entries.length}\nموجودہ ریکارڈز میں شامل کریں؟`)) return;
+      let skippedEntries = 0;
       await withLoader("بیک اپ بحال ہو رہا ہے...", async () => {
         const updatedAt = nowStr(), updatedAtMs = Date.now();
         for (let offset = 0; offset < backup.records.length; offset += 400) {
-          const batch = writeBatch(db);
+          const recRows = [], privRows = [];
           backup.records.slice(offset, offset + 400).forEach(item => {
-            if (!item.id || !item.data) throw new Error("بیک اپ میں ریکارڈ کا فارمیٹ درست نہیں");
-            const row = normalizeRecord(item.data);
+            const rawInput = item?.data || item;
+            const row = normalizeRecord(rawInput);
             if (!row) throw new Error("بیک اپ میں ریکارڈ کا صوبہ یا کوڈ موجود نہیں");
-            const payload = buildRecordPayload(row, updatedAt, updatedAtMs);
-            batch.set(doc(db, "records", item.id), payload);
-            RECORD_DOCS.set(item.id, { id: item.id, ...payload });
+            const built = buildRecordPayload(row, updatedAt, updatedAtMs);
+            if (item?.id && item.id === built.recRow.id) {
+              recRows.push(built.recRow);
+              privRows.push(built.privRow);
+              RECORD_DOCS.set(built.recRow.id, built.docPayload);
+            } else {
+              recRows.push(built.recRow);
+              privRows.push(built.privRow);
+              RECORD_DOCS.set(built.recRow.id, built.docPayload);
+            }
           });
-          await batch.commit();
+          const { error: recErr } = await supabase.from("records").upsert(recRows, { onConflict: "id" });
+          if (recErr) throw recErr;
+          const { error: privErr } = await supabase.from("records_private").upsert(privRows, { onConflict: "record_id" });
+          if (privErr) throw privErr;
         }
+        await cachePut(syncStorageKey(me.id), [...RECORD_DOCS.values()]);
         localStorage.setItem(syncStorageKey(me.id), String(Math.max(0, Date.now() - 10000)));
         applyRecordDocs();
+
         for (let offset = 0; offset < backup.entries.length; offset += 400) {
-          const batch = writeBatch(db);
+          const entryBatch = [];
           backup.entries.slice(offset, offset + 400).forEach(item => {
             if (!item.id || !item.recordId || !item.userId) throw new Error("بیک اپ میں انٹری کا فارمیٹ درست نہیں");
-            const { id: _entryId, ...entryPayload } = item;
-            batch.set(doc(db, "entries", item.id), entryPayload);
+            if (!UUID_RE.test(String(item.userId))) { skippedEntries++; return; }
+            const dbEntry = {
+              id: `${item.recordId}__${item.userId}`,
+              record_id: item.recordId,
+              user_id: item.userId,
+              hifz: item[K.hifz] || "",
+              nazra: item[K.nazra] || "",
+              submitted: !!item.submitted,
+              submitted_at: item.submittedAt || "",
+              updated_by: item.updatedBy || "",
+              updated_at: item.updatedAt || ""
+            };
+            entryBatch.push(dbEntry);
+            upsertLocalEntry(entryFromDb(dbEntry));
           });
-          await batch.commit();
+          if (entryBatch.length) {
+            const { error: entErr } = await supabase.from("entries").upsert(entryBatch, { onConflict: "id" });
+            if (entErr) throw entErr;
+          }
         }
-        await saveLog("بیک اپ بحال");
+        refreshAll();
+        await saveLog("بیک اپ بحال", skippedEntries ? `Skipped non-UUID entries: ${skippedEntries}` : "");
       });
-      alert("بحالی مکمل ہو گئی");
+      alert(skippedEntries
+        ? `بحالی مکمل ہو گئی (غیر-UUID یوزر آئی ڈی والی ${skippedEntries} انٹریاں چھوڑ دی گئیں)`
+        : "بحالی مکمل ہو گئی");
     } catch (error) {
       reportError("بیک اپ بحال نہیں ہوا", error);
     }

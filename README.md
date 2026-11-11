@@ -1,7 +1,10 @@
-# student-portal-5dd94 (MTM Data)
+# MTM Data (Supabase)
 
-مدرسین تصدیق نظام (MTM Data) — Static web application backed by Firebase Authentication, Cloud Firestore, and Cloud Functions.
+مدرسین تصدیق نظام (MTM Data) — Static web application backed by Supabase Auth, PostgreSQL (with Row-Level Security), Realtime, and Edge Functions.
 
-See [FIREBASE_SETUP.md](FIREBASE_SETUP.md) for Firebase configuration and deployment instructions.
+- Schema & RLS: `supabase_schema.sql`
+- Edge Function: `supabase/functions/manage-user/index.ts`
+- Admin bootstrap script: `supabase_setup_admin.mjs`
+- Bulk data import script: `supabase_import.mjs`
 
 The admin report defaults to all users' submissions; use its user filter to view one user's report.

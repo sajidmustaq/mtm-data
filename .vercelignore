@@ -1,0 +1,8 @@
+supabase/
+*.sql
+*.mjs
+README.md
+data.json
+*-adminsdk-*.json
+.env
+.env.*
