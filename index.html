@@ -9,7 +9,7 @@
 <link rel="icon" type="image/svg+xml" href="logo.svg?v=1">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Noto+Naskh+Arabic:wght@400;600;700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="style.css?v=20261111-v7">
+<link rel="stylesheet" href="style.css?v=20261111-v10">
 </head>
 <body>
 
@@ -75,7 +75,7 @@
         <div id="fDistrict" class="ms-wrap"></div>
         <div id="fBranch" class="ms-wrap admin-only"></div>
         <div id="fDuty" class="ms-wrap"></div>
-        <label class="admin-only entry-owner">Entry Viewer: <select id="entryUser"></select></label>
+        <label class="admin-only entry-owner"> <select id="entryUser"></select></label>
         <select id="fStatus">
           <option value="">Status: All</option>
           <option value="pending">Pending</option>
@@ -88,20 +88,20 @@
           <thead>
             <tr>
               <th>#</th>
-              <th>عملہ کوڈ</th>
-              <th>نام</th>
-              <th>ولدیت</th>
-              <th class="admin-only">شاخ</th>
-              <th>ذمہ داری</th>
-              <th>ڈسٹرکٹ</th>
-              <th>ڈویژن</th>
-              <th class="admin-only">صوبہ</th>
-              <th class="admin-only">آفیشل منٹ</th>
-              <th class="admin-only">گریڈ</th>
-              <th class="admin-only">اجارے کے منٹ</th>
-              <th>حفظ کی تدریس؟</th>
-              <th>ناظرہ کی تدریس؟</th>
-              <th>عمل</th>
+              <th data-col="code">عملہ کوڈ</th>
+              <th data-col="name">نام</th>
+              <th data-col="father">ولدیت</th>
+              <th class="admin-only" data-col="branch">شاخ</th>
+              <th data-col="duty">ذمہ داری</th>
+              <th data-col="district">ڈسٹرکٹ</th>
+              <th data-col="division">ڈویژن</th>
+              <th class="admin-only" data-col="province">صوبہ</th>
+              <th class="admin-only" data-col="offMin">آفیشل منٹ</th>
+              <th class="admin-only" data-col="grade">گریڈ</th>
+              <th class="admin-only" data-col="ijaraMin">اجارے کے منٹ</th>
+              <th data-col="hifz">حفظ کی تدریس؟</th>
+              <th data-col="nazra">ناظرہ کی تدریس؟</th>
+              <th data-col="action">عمل</th>
             </tr>
           </thead>
           <tbody></tbody>
@@ -112,9 +112,28 @@
 
     <!-- Reports -->
     <section id="tab-report" class="hidden">
-      <div class="toolbar">
-        <label class="entry-owner">View Report: <select id="reportUser"><option value="">All Users</option></select></label>
+      <div class="entry-top">
+        <div class="summary" id="reportSummary"></div>
+        <div class="entry-actions">
+          <button type="button" class="btn-light" id="rClearFiltersBtn" title="Clear all report filters">Clear Filters</button>
+        </div>
       </div>
+
+      <div class="filter-bar">
+        <input type="text" id="rSearch" placeholder="Search name, code, father, branch">
+        <div id="rProvince" class="ms-wrap"></div>
+        <div id="rDivision" class="ms-wrap"></div>
+        <div id="rDistrict" class="ms-wrap"></div>
+        <div id="rBranch" class="ms-wrap"></div>
+        <div id="rDuty" class="ms-wrap"></div>
+        <label class="entry-owner"><select id="reportUser"><option value="">All Users</option></select></label>
+        <select id="rStatus">
+          <option value="">Status: All</option>
+          <option value="pending">Pending</option>
+          <option value="done">Completed</option>
+        </select>
+      </div>
+
       <h2>Province-wise Report</h2>
       <div class="table-wrap"><table id="repProvince"></table></div>
       <h2>Division-wise Report</h2>
@@ -219,6 +238,29 @@
   </div>
 </dialog>
 
+<!-- Custom Alert Dialog -->
+<dialog id="customAlertDlg" class="custom-alert-dlg" dir="ltr" data-variant="warning" aria-labelledby="customAlertTitle" aria-describedby="customAlertMsg">
+  <div class="custom-alert-card">
+    <div class="custom-alert-accent" aria-hidden="true"></div>
+    <button type="button" id="customAlertCloseBtn" class="custom-alert-close" aria-label="Close alert" title="Close">
+      <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+        <line x1="18" y1="6" x2="6" y2="18"/>
+        <line x1="6" y1="6" x2="18" y2="18"/>
+      </svg>
+    </button>
+    <div class="custom-alert-body">
+      <div id="customAlertIcon" class="custom-alert-icon" aria-hidden="true"></div>
+      <span id="customAlertBadge" class="custom-alert-badge hidden"></span>
+      <h3 id="customAlertTitle" class="custom-alert-title">Notice</h3>
+      <p id="customAlertMsg" class="custom-alert-msg"></p>
+      <div id="customAlertNote" class="custom-alert-note hidden"></div>
+      <div class="custom-alert-actions">
+        <button type="button" id="customAlertOkBtn" class="custom-alert-btn">OK</button>
+      </div>
+    </div>
+  </div>
+</dialog>
+
 <!-- Global Loader -->
 <div id="globalLoader" class="loader-overlay hidden" role="status" aria-live="polite">
   <div class="loader-card">
@@ -227,7 +269,10 @@
   </div>
 </div>
 
+<!-- Excel Table Filter Popover -->
+<div id="excelFilterMenu" class="xf-menu hidden" role="dialog" aria-label="کالم فلٹر"></div>
+
 <script src="xlsx.full.min.js"></script>
-<script type="module" src="app.js?v=20261111-supa3"></script>
+<script type="module" src="app.js?v=20261111-supa7"></script>
 </body>
 </html>

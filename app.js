@@ -113,6 +113,67 @@ function reportError(message, error) {
   alert(`${message}: ${error?.message || error}`);
 }
 
+const ALERT_ICONS = {
+  warning: `<svg viewBox="0 0 24 24" width="28" height="28" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><polyline points="12 7 12 12 15.5 14"/></svg>`,
+  error: `<svg viewBox="0 0 24 24" width="28" height="28" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/></svg>`,
+  success: `<svg viewBox="0 0 24 24" width="28" height="28" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><polyline points="9 12.5 11.2 14.7 15.5 9.8"/></svg>`,
+  info: `<svg viewBox="0 0 24 24" width="28" height="28" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><line x1="12" y1="16" x2="12" y2="11.5"/><circle cx="12" cy="8" r=".7" fill="currentColor"/></svg>`
+};
+
+let activeAlertCleanup = null;
+
+function showCustomAlert({ variant = "info", badge = "", title = "Notice", message = "", note = "", okText = "OK" } = {}) {
+  const dlg = $("customAlertDlg");
+  if (!dlg) {
+    alert(message || title);
+    return Promise.resolve();
+  }
+  if (activeAlertCleanup) activeAlertCleanup();
+
+  const safeVariant = Object.hasOwn(ALERT_ICONS, variant) ? variant : "info";
+  dlg.dataset.variant = safeVariant;
+  $("customAlertIcon").innerHTML = ALERT_ICONS[safeVariant];
+
+  const badgeEl = $("customAlertBadge");
+  badgeEl.textContent = badge;
+  badgeEl.classList.toggle("hidden", !badge);
+
+  $("customAlertTitle").textContent = title;
+  $("customAlertMsg").textContent = message;
+
+  const noteEl = $("customAlertNote");
+  noteEl.textContent = note;
+  noteEl.classList.toggle("hidden", !note);
+
+  const okBtn = $("customAlertOkBtn");
+  const closeBtn = $("customAlertCloseBtn");
+  okBtn.textContent = okText;
+
+  return new Promise(resolve => {
+    const cleanup = () => {
+      okBtn.onclick = null;
+      closeBtn.onclick = null;
+      dlg.onclick = null;
+      dlg.oncancel = null;
+      activeAlertCleanup = null;
+      if (dlg.open) dlg.close();
+      resolve();
+    };
+    activeAlertCleanup = cleanup;
+    okBtn.onclick = cleanup;
+    closeBtn.onclick = cleanup;
+    dlg.onclick = event => {
+      if (event.target === dlg) cleanup();
+    };
+    dlg.oncancel = event => {
+      event.preventDefault();
+      cleanup();
+    };
+    dlg.showModal();
+    okBtn.focus();
+  });
+}
+
 function assignmentsForUser(user) {
   return Array.isArray(user.assignments) ? user.assignments : [];
 }
@@ -124,10 +185,10 @@ function normalizeRole(role) {
 
 function hasRegion(user, row) {
   if (user.role === "admin") return true;
-  const prov = nfc(row[K.province]);
-  const div = nfc(row[K.division]);
-  return assignmentsForUser(user).some(a => nfc(a.province) === prov &&
-    (!Array.isArray(a.divisions) || !a.divisions.length || a.divisions.some(d => nfc(d) === div)));
+  const prov = nfc(row[K.province]).trim();
+  const div = nfc(row[K.division]).trim();
+  return assignmentsForUser(user).some(a => nfc(a.province).trim() === prov &&
+    (!Array.isArray(a.divisions) || !a.divisions.length || a.divisions.some(d => nfc(d).trim() === div)));
 }
 
 function visibleRows() {
@@ -559,15 +620,21 @@ function resetLoginPassword() {
 }
 
 function resetAllFilters() {
-  ["fSearch", "fStatus", "uSearch", "uFilterRole", "uFilterProvince", "uFilterStatus"].forEach(id => {
+  ["fSearch", "fStatus", "rSearch", "rStatus", "reportUser", "uSearch", "uFilterRole", "uFilterProvince", "uFilterStatus"].forEach(id => {
     if ($(id)) $(id).value = "";
   });
   Object.values(multiFilters).forEach(mf => mf.clear(true));
+  Object.values(reportMultiFilters).forEach(mf => mf.clear(true));
+  tableColFilters.clear();
+  tableSort = { key: null, dir: "" };
+  closeExcelFilterMenu();
   page = 1;
 }
 
 function returnToLogin(message = "") {
   stopListeners();
+  if ($("userDlg")?.open) $("userDlg").close();
+  if ($("confirmDlg")?.open) $("confirmCancelBtn")?.click();
   activeUid = null;
   me = null; DATA = []; USERS = []; ENTRIES = []; LOG = [];
   usersLoaded = false; entriesLoaded = false; loggingOut = false; recordsLoading = false; pendingScopeSelection = null;
@@ -702,10 +769,26 @@ setInterval(async () => {
   catch (error) { console.error("Could not save automatic logout log", error); }
   try {
     await supabase.auth.signOut();
-    alert("خاموشی کی وجہ سے آپ کو لاگ آؤٹ کر دیا گیا ہے۔");
+    const idleMinutes = Math.round(IDLE_MS / 60000);
+    await showCustomAlert({
+      variant: "warning",
+      badge: "Session Timeout",
+      title: "Logged Out Due to Inactivity",
+      message: `You have been logged out automatically after ${idleMinutes} minutes of inactivity.`,
+      note: "Please log in again to continue.",
+      okText: "OK"
+    });
   } catch (error) {
+    console.error("Automatic logout failed", error);
+    await showCustomAlert({
+      variant: "error",
+      badge: "Logout Error",
+      title: "Automatic Logout Failed",
+      message: "Automatic logout could not be completed. Please try logging out manually.",
+      note: error?.message || String(error || ""),
+      okText: "OK"
+    });
     loggingOut = false;
-    reportError("خودکار لاگ آؤٹ مکمل نہیں ہو سکا", error);
   }
 }, 15000);
 
@@ -809,17 +892,306 @@ function createMultiFilter(containerId, allLabel, pluralLabel, onChange) {
   };
 }
 
-document.addEventListener("click", () => document.querySelectorAll(".ms-menu").forEach(m => m.classList.add("hidden")));
-document.addEventListener("keydown", event => {
-  if (event.key === "Escape") document.querySelectorAll(".ms-menu").forEach(m => m.classList.add("hidden"));
+document.addEventListener("click", () => {
+  document.querySelectorAll(".ms-menu").forEach(m => m.classList.add("hidden"));
+  closeExcelFilterMenu();
 });
+document.addEventListener("keydown", event => {
+  if (event.key === "Escape") {
+    document.querySelectorAll(".ms-menu").forEach(m => m.classList.add("hidden"));
+    closeExcelFilterMenu();
+  }
+});
+
+const EMPTY_VAL = "__EMPTY__";
+const TABLE_COL_DEFS = {
+  code:     { label: "عملہ کوڈ",       get: r => r[K.code] || "" },
+  name:     { label: "نام",            get: r => r[K.name] || "" },
+  father:   { label: "ولدیت",          get: r => r[K.father] || "" },
+  branch:   { label: "شاخ",            get: r => r[K.branch] || "" },
+  duty:     { label: "ذمہ داری",       get: r => r[K.duty] || "" },
+  district: { label: "ڈسٹرکٹ",        get: r => r[K.district] || "" },
+  division: { label: "ڈویژن",          get: r => r[K.division] || "" },
+  province: { label: "صوبہ",           get: r => r[K.province] || "" },
+  offMin:   { label: "آفیشل منٹ",      get: r => r[K.offMin] || "" },
+  grade:    { label: "گریڈ",           get: r => r[K.grade] || "" },
+  ijaraMin: { label: "اجارے کے منٹ",   get: r => r[K.ijaraMin] || "" },
+  hifz:     { label: "حفظ کی تدریس؟",  get: (r, ownerId) => entryFor(r, ownerId)?.[K.hifz] || "" },
+  nazra:    { label: "ناظرہ کی تدریس؟", get: (r, ownerId) => entryFor(r, ownerId)?.[K.nazra] || "" },
+  action:   { label: "عمل",            get: (r, ownerId) => isEntryLocked(entryFor(r, ownerId)) ? "جمع شدہ" : "باقی" }
+};
+
+const tableColFilters = new Map();
+let tableSort = { key: null, dir: "" };
+let openExcelColKey = null;
+
+function closeExcelFilterMenu() {
+  openExcelColKey = null;
+  $("excelFilterMenu")?.classList.add("hidden");
+}
+
+function compareFilterKeys(a, b) {
+  if (a === EMPTY_VAL && b === EMPTY_VAL) return 0;
+  if (a === EMPTY_VAL) return 1;
+  if (b === EMPTY_VAL) return -1;
+  return String(a).localeCompare(String(b), undefined, { numeric: true, sensitivity: "base" });
+}
+
+function compareRowSort(a, b, key, dir, ownerId) {
+  const getter = TABLE_COL_DEFS[key]?.get;
+  if (!getter) return 0;
+  const va = String(getter(a, ownerId) || "");
+  const vb = String(getter(b, ownerId) || "");
+  if (!va && !vb) return 0;
+  if (!va) return 1;
+  if (!vb) return -1;
+  const cmp = va.localeCompare(vb, undefined, { numeric: true, sensitivity: "base" });
+  return dir === "desc" ? -cmp : cmp;
+}
+
+function updateTableFilterHeaders() {
+  document.querySelectorAll("#dataTable thead th[data-col]").forEach(th => {
+    const colKey = th.dataset.col;
+    const hasFilter = tableColFilters.has(colKey);
+    const isSorted = tableSort.key === colKey;
+    th.classList.toggle("col-filtered", hasFilter || isSorted);
+    const btn = th.querySelector(".th-filter-btn");
+    if (!btn) return;
+    btn.classList.toggle("active", hasFilter);
+    btn.classList.toggle("has-sort", !hasFilter && isSorted);
+    if (hasFilter) {
+      btn.innerHTML = `<svg viewBox="0 0 16 16" width="12" height="12" fill="currentColor" aria-hidden="true"><path d="M1.5 2.5h13l-5 5.8v4.2l-3 1.5V8.3l-5-5.8z"/></svg>`;
+    } else if (isSorted) {
+      btn.innerHTML = tableSort.dir === "asc"
+        ? `<svg viewBox="0 0 16 16" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 13V3M4.5 6.5L8 3l3.5 3.5"/></svg>`
+        : `<svg viewBox="0 0 16 16" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 3v10M4.5 9.5L8 13l3.5-3.5"/></svg>`;
+    } else {
+      btn.innerHTML = `<svg viewBox="0 0 16 16" width="12" height="12" fill="currentColor" aria-hidden="true"><path d="M4 6l4 4.5L12 6H4z"/></svg>`;
+    }
+  });
+}
+
+function openExcelFilterMenu(colKey, btn) {
+  const menu = $("excelFilterMenu");
+  const def = TABLE_COL_DEFS[colKey];
+  if (!menu || !def) return;
+  if (openExcelColKey === colKey && !menu.classList.contains("hidden")) {
+    closeExcelFilterMenu();
+    return;
+  }
+  document.querySelectorAll(".ms-menu").forEach(m => m.classList.add("hidden"));
+  openExcelColKey = colKey;
+
+  const ownerId = entryOwnerId();
+  const baseRows = getEntryFilteredRows(colKey);
+  const counts = new Map();
+  baseRows.forEach(row => {
+    const raw = String(def.get(row, ownerId) || "");
+    const key = raw === "" ? EMPTY_VAL : raw;
+    counts.set(key, (counts.get(key) || 0) + 1);
+  });
+  const allKeys = [...counts.keys()].sort(compareFilterKeys);
+  const keyLabel = k => (k === EMPTY_VAL ? "(خالی)" : k);
+
+  const activeSet = tableColFilters.get(colKey);
+  const pendingSet = activeSet ? new Set(activeSet) : new Set(allKeys);
+  let searchSet = null;
+  let searchQuery = "";
+  let renderLimit = 200;
+
+  menu.innerHTML = `
+    <div class="xf-head">
+      <span class="xf-title">${esc(def.label)}</span>
+    </div>
+    <div class="xf-sort-row">
+      <button type="button" class="xf-sort-btn ${tableSort.key === colKey && tableSort.dir === "asc" ? "active" : ""}" data-sort="asc">A ← Z ترتیب</button>
+      <button type="button" class="xf-sort-btn ${tableSort.key === colKey && tableSort.dir === "desc" ? "active" : ""}" data-sort="desc">Z ← A ترتیب</button>
+    </div>
+    <button type="button" class="xf-clear-col" ${activeSet ? "" : "disabled"}>اس کالم کا فلٹر ختم کریں</button>
+    <input type="text" class="xf-search" placeholder="تلاش کریں...">
+    <div class="xf-all-row">
+      <label><input type="checkbox" class="xf-all-cb"> <span class="xf-all-label">سب منتخب کریں</span></label>
+      <span class="xf-meta"></span>
+    </div>
+    <div class="xf-list"></div>
+    <div class="xf-actions">
+      <button type="button" class="btn xf-apply">لاگو کریں</button>
+      <button type="button" class="btn-light xf-cancel">منسوخ</button>
+    </div>
+  `;
+
+  menu.onclick = event => event.stopPropagation();
+
+  const searchInput = menu.querySelector(".xf-search");
+  const allCb = menu.querySelector(".xf-all-cb");
+  const allLabel = menu.querySelector(".xf-all-label");
+  const metaEl = menu.querySelector(".xf-meta");
+  const listEl = menu.querySelector(".xf-list");
+
+  const currentWorkingSet = () => (searchQuery ? searchSet : pendingSet);
+  const getDisplayedKeys = () => {
+    if (!searchQuery) return allKeys;
+    return allKeys.filter(k => keyLabel(k).toLowerCase().includes(searchQuery));
+  };
+
+  function syncMasterState(displayed) {
+    const workSet = currentWorkingSet();
+    let checkedCount = 0;
+    displayed.forEach(k => { if (workSet.has(k)) checkedCount++; });
+    allCb.checked = displayed.length > 0 && checkedCount === displayed.length;
+    allCb.indeterminate = checkedCount > 0 && checkedCount < displayed.length;
+    allLabel.textContent = searchQuery ? "تلاش کے نتائج منتخب کریں" : "سب منتخب کریں";
+    metaEl.textContent = `${checkedCount} / ${displayed.length}`;
+  }
+
+  function renderChecklist() {
+    const displayed = getDisplayedKeys();
+    const workSet = currentWorkingSet();
+    syncMasterState(displayed);
+    if (!displayed.length) {
+      listEl.innerHTML = '<div class="xf-empty">کوئی نتیجہ نہیں ملا</div>';
+      return;
+    }
+    const visible = displayed.slice(0, renderLimit);
+    const itemsHtml = visible.map(k => {
+      const checked = workSet.has(k) ? "checked" : "";
+      const isEmpty = k === EMPTY_VAL;
+      return `<label class="xf-opt"><input type="checkbox" value="${esc(k)}" ${checked}>
+        <span class="xf-val ${isEmpty ? "empty-val" : ""}" title="${esc(keyLabel(k))}">${esc(keyLabel(k))}</span>
+        <span class="xf-cnt">${counts.get(k)}</span></label>`;
+    }).join("");
+    const moreHtml = displayed.length > renderLimit
+      ? `<button type="button" class="xf-more">مزید ${displayed.length - renderLimit} دکھائیں...</button>`
+      : "";
+    listEl.innerHTML = itemsHtml + moreHtml;
+  }
+
+  function applyAndClose() {
+    const finalSet = searchQuery ? searchSet : pendingSet;
+    if (finalSet.size === allKeys.length && !searchQuery) {
+      tableColFilters.delete(colKey);
+    } else if (finalSet.size === allKeys.length && allKeys.every(k => finalSet.has(k))) {
+      tableColFilters.delete(colKey);
+    } else {
+      tableColFilters.set(colKey, new Set(finalSet));
+    }
+    page = 1;
+    closeExcelFilterMenu();
+    renderTable();
+  }
+
+  menu.querySelectorAll(".xf-sort-btn").forEach(sortBtn => {
+    sortBtn.onclick = () => {
+      const dir = sortBtn.dataset.sort;
+      if (tableSort.key === colKey && tableSort.dir === dir) {
+        tableSort = { key: null, dir: "" };
+      } else {
+        tableSort = { key: colKey, dir };
+      }
+      page = 1;
+      closeExcelFilterMenu();
+      renderTable();
+    };
+  });
+
+  menu.querySelector(".xf-clear-col").onclick = () => {
+    tableColFilters.delete(colKey);
+    page = 1;
+    closeExcelFilterMenu();
+    renderTable();
+  };
+
+  searchInput.oninput = () => {
+    searchQuery = searchInput.value.trim().toLowerCase();
+    renderLimit = 200;
+    searchSet = searchQuery ? new Set(getDisplayedKeys()) : null;
+    renderChecklist();
+  };
+
+  searchInput.onkeydown = event => {
+    if (event.key === "Enter") {
+      event.preventDefault();
+      applyAndClose();
+    }
+  };
+
+  allCb.onchange = () => {
+    const displayed = getDisplayedKeys();
+    const workSet = currentWorkingSet();
+    if (allCb.checked) displayed.forEach(k => workSet.add(k));
+    else displayed.forEach(k => workSet.delete(k));
+    renderChecklist();
+  };
+
+  listEl.onchange = event => {
+    const cb = event.target;
+    if (cb.type !== "checkbox") return;
+    const workSet = currentWorkingSet();
+    if (cb.checked) workSet.add(cb.value);
+    else workSet.delete(cb.value);
+    syncMasterState(getDisplayedKeys());
+  };
+
+  listEl.onclick = event => {
+    if (!event.target.classList.contains("xf-more")) return;
+    renderLimit += 200;
+    renderChecklist();
+  };
+
+  menu.querySelector(".xf-apply").onclick = applyAndClose;
+  menu.querySelector(".xf-cancel").onclick = closeExcelFilterMenu;
+
+  renderChecklist();
+  menu.classList.remove("hidden");
+
+  const rect = btn.getBoundingClientRect();
+  const mw = menu.offsetWidth || 268;
+  const mh = menu.offsetHeight || 340;
+  let top = rect.bottom + 4;
+  if (top + mh > window.innerHeight - 8) {
+    top = Math.max(8, rect.top - mh - 4);
+  }
+  let left = rect.left;
+  if (left + mw > window.innerWidth - 8) left = window.innerWidth - mw - 8;
+  if (left < 8) left = 8;
+  menu.style.top = `${top}px`;
+  menu.style.left = `${left}px`;
+  searchInput.focus();
+}
+
+function initTableExcelFilters() {
+  document.querySelectorAll("#dataTable thead th[data-col]").forEach(th => {
+    const colKey = th.dataset.col;
+    if (!TABLE_COL_DEFS[colKey] || th.querySelector(".th-excel")) return;
+    const title = th.textContent.trim();
+    th.innerHTML = `<div class="th-excel"><span class="th-label">${esc(title)}</span><button type="button" class="th-filter-btn" aria-label="${esc(title)} فلٹر" title="فلٹر اور ترتیب"></button></div>`;
+    const btn = th.querySelector(".th-filter-btn");
+    btn.addEventListener("click", event => {
+      event.stopPropagation();
+      openExcelFilterMenu(colKey, btn);
+    });
+  });
+  const wrap = $("dataTable")?.closest(".table-wrap");
+  wrap?.addEventListener("scroll", closeExcelFilterMenu, { passive: true });
+  window.addEventListener("resize", closeExcelFilterMenu, { passive: true });
+  updateTableFilterHeaders();
+}
+initTableExcelFilters();
 
 const multiFilters = {
   province: createMultiFilter("fProvince", "تمام صوبے", "صوبے", () => { page = 1; fillFilters(); renderTable(); }),
   division: createMultiFilter("fDivision", "تمام ڈویژنز", "ڈویژنز", () => { page = 1; fillFilters(); renderTable(); }),
-  district: createMultiFilter("fDistrict", "تمام اضلاع", "اضلاع", () => { page = 1; fillFilters(); renderTable(); }),
+  district: createMultiFilter("fDistrict", "تمام ڈسٹرکٹ", "ڈسٹرکٹ", () => { page = 1; fillFilters(); renderTable(); }),
   branch:   createMultiFilter("fBranch",   "تمام شاخیں", "شاخیں", () => { page = 1; fillFilters(); renderTable(); }),
   duty:     createMultiFilter("fDuty",     "تمام ذمہ داریاں", "ذمہ داریاں", () => { page = 1; renderTable(); })
+};
+
+const reportMultiFilters = {
+  province: createMultiFilter("rProvince", "تمام صوبے", "صوبے", () => { fillReportFilters(); renderReport(); }),
+  division: createMultiFilter("rDivision", "تمام ڈویژنز", "ڈویژنز", () => { fillReportFilters(); renderReport(); }),
+  district: createMultiFilter("rDistrict", "تمام ڈسٹرکٹ", "ڈسٹرکٹ", () => { fillReportFilters(); renderReport(); }),
+  branch:   createMultiFilter("rBranch",   "تمام شاخیں", "شاخیں", () => { fillReportFilters(); renderReport(); }),
+  duty:     createMultiFilter("rDuty",     "تمام ذمہ داریاں", "ذمہ داریاں", () => { renderReport(); })
 };
 
 function fillProvinceSelects() {
@@ -838,29 +1210,65 @@ function fillFilter(select, label, values) {
   if (values.includes(current)) select.value = current;
 }
 
-function fillFilters() {
-  let rows = visibleRows();
-  const selProvs = $("fProvince").classList.contains("hidden") ? new Set() : multiFilters.province.getSelected();
-  if (selProvs.size) rows = rows.filter(r => selProvs.has(r[K.province]));
+function cascadeMultiFilters(baseRows, filters, { setProvince = false, useProvince = true, useBranch = true } = {}) {
+  let rows = baseRows;
   const unique = field => [...new Set(rows.map(r => r[field]).filter(Boolean))].sort();
 
-  multiFilters.division.setOptions(unique(K.division));
-  const selDivs = multiFilters.division.getSelected();
-  if (selDivs.size) rows = rows.filter(r => selDivs.has(r[K.division]));
-
-  multiFilters.district.setOptions(unique(K.district));
-  const selDists = multiFilters.district.getSelected();
-  if (selDists.size) rows = rows.filter(r => selDists.has(r[K.district]));
-
-  if (!$("fBranch").classList.contains("hidden")) {
-    multiFilters.branch.setOptions(unique(K.branch));
-    const selBranches = multiFilters.branch.getSelected();
-    if (selBranches.size) rows = rows.filter(r => selBranches.has(r[K.branch]));
-  } else {
-    multiFilters.branch.clear(true);
+  if (useProvince) {
+    if (setProvince) filters.province.setOptions(unique(K.province));
+    const selProvs = filters.province.getSelected();
+    if (selProvs.size) rows = rows.filter(r => selProvs.has(r[K.province]));
   }
 
-  multiFilters.duty.setOptions(unique(K.duty));
+  filters.division.setOptions(unique(K.division));
+  const selDivs = filters.division.getSelected();
+  if (selDivs.size) rows = rows.filter(r => selDivs.has(r[K.division]));
+
+  filters.district.setOptions(unique(K.district));
+  const selDists = filters.district.getSelected();
+  if (selDists.size) rows = rows.filter(r => selDists.has(r[K.district]));
+
+  if (useBranch) {
+    filters.branch.setOptions(unique(K.branch));
+    const selBranches = filters.branch.getSelected();
+    if (selBranches.size) rows = rows.filter(r => selBranches.has(r[K.branch]));
+  } else {
+    filters.branch.clear(true);
+  }
+
+  filters.duty.setOptions(unique(K.duty));
+}
+
+function fillFilters() {
+  cascadeMultiFilters(visibleRows(), multiFilters, {
+    setProvince: false,
+    useProvince: !$("fProvince").classList.contains("hidden"),
+    useBranch: !$("fBranch").classList.contains("hidden")
+  });
+}
+
+function fillReportFilters() {
+  if (!me || me.role !== "admin") return;
+  cascadeMultiFilters(reportBaseRows(), reportMultiFilters, {
+    setProvince: true,
+    useProvince: true,
+    useBranch: true
+  });
+}
+
+function matchesRowFilters(row, { selProvs, selDivs, selDists, selBranches, selDuties, search, includeBranchSearch }) {
+  if (selProvs.size && !selProvs.has(row[K.province])) return false;
+  if (selDivs.size && !selDivs.has(row[K.division])) return false;
+  if (selDists.size && !selDists.has(row[K.district])) return false;
+  if (selBranches.size && !selBranches.has(row[K.branch])) return false;
+  if (selDuties.size && !selDuties.has(row[K.duty])) return false;
+  if (search) {
+    const searchFields = includeBranchSearch
+      ? [row[K.name], row[K.code], row[K.father], row[K.branch], row[K.duty]]
+      : [row[K.name], row[K.code], row[K.father], row[K.duty]];
+    if (!searchFields.some(v => String(v || "").toLowerCase().includes(search))) return false;
+  }
+  return true;
 }
 
 function parseEnGbMs(str) {
@@ -868,32 +1276,44 @@ function parseEnGbMs(str) {
   return m ? Date.UTC(+m[3], +m[2] - 1, +m[1], +m[4], +m[5], +m[6]) : 0;
 }
 
-function filteredRows() {
+function getEntryFilteredRows(excludeColKey = null) {
   const search = $("fSearch").value.trim().toLowerCase();
   const isAdmin = me?.role === "admin";
   const ownerId = entryOwnerId();
-  const selProvs = $("fProvince").classList.contains("hidden") ? new Set() : multiFilters.province.getSelected();
-  const selDivs = multiFilters.division.getSelected();
-  const selDists = multiFilters.district.getSelected();
-  const selBranches = $("fBranch").classList.contains("hidden") ? new Set() : multiFilters.branch.getSelected();
-  const selDuties = multiFilters.duty.getSelected();
+  const filterCriteria = {
+    selProvs: $("fProvince").classList.contains("hidden") ? new Set() : multiFilters.province.getSelected(),
+    selDivs: multiFilters.division.getSelected(),
+    selDists: multiFilters.district.getSelected(),
+    selBranches: $("fBranch").classList.contains("hidden") ? new Set() : multiFilters.branch.getSelected(),
+    selDuties: multiFilters.duty.getSelected(),
+    search,
+    includeBranchSearch: isAdmin
+  };
   const status = $("fStatus").value;
-  const rows = visibleRows().filter(row => {
-    if (selProvs.size && !selProvs.has(row[K.province])) return false;
-    if (selDivs.size && !selDivs.has(row[K.division])) return false;
-    if (selDists.size && !selDists.has(row[K.district])) return false;
-    if (selBranches.size && !selBranches.has(row[K.branch])) return false;
-    if (selDuties.size && !selDuties.has(row[K.duty])) return false;
+  return visibleRows().filter(row => {
+    if (!matchesRowFilters(row, filterCriteria)) return false;
     const entry = entryFor(row, ownerId);
     if (status === "done" && !isDone(entry)) return false;
     if (status === "pending" && isDone(entry)) return false;
-    const searchFields = isAdmin
-      ? [row[K.name], row[K.code], row[K.father], row[K.branch], row[K.duty]]
-      : [row[K.name], row[K.code], row[K.father], row[K.duty]];
-    if (search && !searchFields.some(v => String(v || "").toLowerCase().includes(search))) return false;
+    for (const [colKey, allowed] of tableColFilters.entries()) {
+      if (colKey === excludeColKey) continue;
+      const def = TABLE_COL_DEFS[colKey];
+      if (!def) continue;
+      const raw = String(def.get(row, ownerId) || "");
+      const key = raw === "" ? EMPTY_VAL : raw;
+      if (!allowed.has(key)) return false;
+    }
     return true;
   });
-  if (!isAdmin) {
+}
+
+function filteredRows() {
+  const isAdmin = me?.role === "admin";
+  const ownerId = entryOwnerId();
+  const rows = getEntryFilteredRows(null);
+  if (tableSort.key) {
+    rows.sort((a, b) => compareRowSort(a, b, tableSort.key, tableSort.dir, ownerId));
+  } else if (!isAdmin) {
     rows.sort((a, b) => {
       const ea = entryFor(a, ownerId);
       const eb = entryFor(b, ownerId);
@@ -951,6 +1371,8 @@ function showConfirmModal({ icon = "⚠️", title = "تصدیقِ اندراج"
 function renderTable() {
   if (!me) return;
   const rows = filteredRows();
+  renderMini(rows);
+  updateTableFilterHeaders();
   const pages = Math.max(1, Math.ceil(rows.length / PAGE_SIZE));
   if (page > pages) page = pages;
   const slice = rows.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
@@ -990,9 +1412,9 @@ function renderTable() {
   $("pNext").onclick = () => { page++; renderTable(); };
 }
 
-function renderMini() {
-  const rows = visibleRows();
-  const done = rows.filter(row => isDone(entryFor(row))).length;
+function renderMini(rows = filteredRows()) {
+  const ownerId = entryOwnerId();
+  const done = rows.filter(row => isDone(entryFor(row, ownerId))).length;
   $("miniSummary").innerHTML = `<div><b>${rows.length}</b>کل مدرسین</div>
     <div><b>${done}</b>انٹری مکمل</div><div class="rem"><b>${rows.length - done}</b>باقی</div>`;
 }
@@ -1000,9 +1422,11 @@ function renderMini() {
 function refreshAll() {
   if (!me) return;
   fillFilters();
-  renderMini();
   renderTable();
-  if (me.role === "admin" && !$("tab-report").classList.contains("hidden")) renderReport();
+  if (me.role === "admin") {
+    fillReportFilters();
+    if (!$("tab-report").classList.contains("hidden")) renderReport();
+  }
 }
 
 function fixPair(entry, changed) {
@@ -1171,6 +1595,9 @@ $("clearFiltersBtn").addEventListener("click", () => {
   $("fSearch").value = "";
   $("fStatus").value = "";
   Object.values(multiFilters).forEach(mf => mf.clear(true));
+  tableColFilters.clear();
+  tableSort = { key: null, dir: "" };
+  closeExcelFilterMenu();
   page = 1;
   fillFilters();
   renderTable();
@@ -1189,18 +1616,37 @@ function fillReportUsers() {
   if (!me || me.role !== "admin") return;
   const select = $("reportUser");
   const current = select.value;
-  select.innerHTML = '<option value="">تمام یوزرز</option>' + USERS.map(user =>
-    `<option value="${esc(user.id)}">${esc(user.username)}${user.active ? "" : " (غیر فعال)"}</option>`
-  ).join("");
+  select.innerHTML = '<option value="">تمام یوزرز</option>' + USERS.map(user => {
+    const tags = [
+      user.role === "admin" ? "ایڈمن" : "",
+      user.active ? "" : "غیر فعال"
+    ].filter(Boolean).join("، ");
+    return `<option value="${esc(user.id)}">${esc(user.username)}${tags ? ` (${tags})` : ""}</option>`;
+  }).join("");
   select.value = USERS.some(user => user.id === current) ? current : "";
 }
 $("entryUser").addEventListener("change", () => {
   DRAFT_ENTRIES.clear();
+  tableColFilters.clear();
+  tableSort = { key: null, dir: "" };
+  closeExcelFilterMenu();
   page = 1;
   fillProvinceSelects();
   refreshAll();
 });
-$("reportUser").addEventListener("change", renderReport);
+$("reportUser").addEventListener("change", () => {
+  fillReportFilters();
+  renderReport();
+});
+$("rSearch").addEventListener("input", renderReport);
+$("rStatus").addEventListener("change", renderReport);
+$("rClearFiltersBtn").addEventListener("click", () => {
+  $("rSearch").value = "";
+  $("rStatus").value = "";
+  Object.values(reportMultiFilters).forEach(mf => mf.clear(true));
+  fillReportFilters();
+  renderReport();
+});
 
 $("refreshBtn").addEventListener("click", async () => {
   if (!me) return;
@@ -1362,6 +1808,60 @@ $("importFile").addEventListener("change", event => {
   reader.readAsArrayBuffer(file);
 });
 
+function reportBaseRows() {
+  const ownerId = $("reportUser")?.value || "";
+  if (!ownerId) return DATA;
+  const user = USERS.find(u => u.id === ownerId);
+  if (!user) return DATA.filter(row => row.assignedTo?.includes(ownerId));
+  if (user.role === "admin") {
+    const touchedIds = new Set(
+      ENTRIES
+        .filter(e => e.userId === ownerId || (user.username && e.updatedBy === user.username))
+        .map(e => e.recordId)
+    );
+    return DATA.filter(row => touchedIds.has(row.id));
+  }
+  return DATA.filter(row => hasRegion(user, row));
+}
+
+function reportCompletedSet(ownerId = $("reportUser")?.value || "") {
+  const user = ownerId ? USERS.find(u => u.id === ownerId) : null;
+  const isAdminUser = user?.role === "admin";
+  return new Set(
+    ENTRIES
+      .filter(entry => {
+        if (!isDone(entry)) return false;
+        if (!ownerId) return true;
+        if (isAdminUser) {
+          return entry.userId === ownerId || (user.username && entry.updatedBy === user.username);
+        }
+        return entry.userId === ownerId;
+      })
+      .map(entry => entry.recordId)
+  );
+}
+
+function reportFilteredRows(completedRecords) {
+  const search = ($("rSearch")?.value || "").trim().toLowerCase();
+  const status = $("rStatus")?.value || "";
+  const filterCriteria = {
+    selProvs: reportMultiFilters.province.getSelected(),
+    selDivs: reportMultiFilters.division.getSelected(),
+    selDists: reportMultiFilters.district.getSelected(),
+    selBranches: reportMultiFilters.branch.getSelected(),
+    selDuties: reportMultiFilters.duty.getSelected(),
+    search,
+    includeBranchSearch: true
+  };
+  return reportBaseRows().filter(row => {
+    if (!matchesRowFilters(row, filterCriteria)) return false;
+    const isRowDone = completedRecords.has(row.id);
+    if (status === "done" && !isRowDone) return false;
+    if (status === "pending" && isRowDone) return false;
+    return true;
+  });
+}
+
 function reportRow(label, group) {
   const remaining = group.total - group.done;
   const percent = group.total ? Math.round(group.done * 100 / group.total) : 0;
@@ -1372,45 +1872,53 @@ function reportRow(label, group) {
 function renderGroupedReport(field, table, label, reportRows, completedRecords) {
   const groups = new Map();
   reportRows.forEach(row => {
-    const key = `${row[K.province]}||${row[field] || "نامعلوم"}`;
+    const key = `${row[K.province] || "نامعلوم"}||${row[field] || "نامعلوم"}`;
     const group = groups.get(key) || { total: 0, done: 0 };
     group.total++;
     if (completedRecords.has(row.id)) group.done++;
     groups.set(key, group);
   });
+  let total = 0, done = 0;
   const body = [...groups.entries()].sort((a, b) => a[0].localeCompare(b[0])).map(([key, group]) => {
     const [province, name] = key.split("||");
+    total += group.total;
+    done += group.done;
     return `<tr><td>${esc(province)}</td><td>${esc(name)}</td><td>${group.total}</td>
       <td>${group.done}</td><td class="rem-num">${group.total - group.done}</td>
       <td>${group.total ? Math.round(group.done * 100 / group.total) : 0}%</td></tr>`;
   }).join("");
+  const percent = total ? Math.round(done * 100 / total) : 0;
   $(table).innerHTML = `<thead><tr><th>صوبہ</th><th>${label}</th><th>کل انٹریاں</th><th>مکمل</th><th>باقی</th><th>پیش رفت</th></tr></thead>
-    <tbody>${body || '<tr><td colspan="6" class="center">ڈیٹا موجود نہیں</td></tr>'}</tbody>`;
+    <tbody>${body || '<tr><td colspan="6" class="center">ڈیٹا موجود نہیں</td></tr>'}</tbody>
+    <tfoot><tr><td colspan="2">کل</td><td>${total}</td><td>${done}</td><td class="rem-num">${total - done}</td><td>${percent}%</td></tr></tfoot>`;
 }
 
 function renderReport() {
   const ownerId = $("reportUser").value;
-  const reportRows = ownerId
-    ? DATA.filter(row => row.assignedTo?.includes(ownerId))
-    : DATA;
-  const completedRecords = new Set(ENTRIES
-    .filter(entry => (!ownerId || entry.userId === ownerId) && isDone(entry))
-    .map(entry => entry.recordId));
+  const completedRecords = reportCompletedSet(ownerId);
+  const reportRows = reportFilteredRows(completedRecords);
   const groups = new Map();
   reportRows.forEach(row => {
-    const group = groups.get(row[K.province]) || { total: 0, done: 0 };
+    const prov = row[K.province] || "نامعلوم";
+    const group = groups.get(prov) || { total: 0, done: 0 };
     group.total++;
     if (completedRecords.has(row.id)) group.done++;
-    groups.set(row[K.province], group);
+    groups.set(prov, group);
   });
   let total = 0, done = 0;
-  const body = provinces.map(province => {
-    const group = groups.get(province) || { total: 0, done: 0 };
+  const body = [...groups.entries()].sort((a, b) => a[0].localeCompare(b[0])).map(([province, group]) => {
     total += group.total; done += group.done;
     return reportRow(province, group);
   }).join("");
+  const remaining = total - done;
+  const percent = total ? Math.round(done * 100 / total) : 0;
+  if ($("reportSummary")) {
+    $("reportSummary").innerHTML = `<div><b>${total}</b>کل ریکارڈ</div>
+      <div><b>${done}</b>انٹری مکمل</div><div class="rem"><b>${remaining}</b>باقی</div>
+      <div><b>${percent}%</b>پیش رفت</div>`;
+  }
   $("repProvince").innerHTML = `<thead><tr><th>صوبہ</th><th>کل انٹریاں</th><th>مکمل</th><th>باقی</th><th>پیش رفت</th></tr></thead>
-    <tbody>${body}</tbody><tfoot>${reportRow("کل", { total, done })}</tfoot>`;
+    <tbody>${body || '<tr><td colspan="5" class="center">ڈیٹا موجود نہیں</td></tr>'}</tbody><tfoot>${reportRow("کل", { total, done })}</tfoot>`;
   renderGroupedReport(K.division, "repDivision", "ڈویژن", reportRows, completedRecords);
   renderGroupedReport(K.district, "repDistrict", "ڈسٹرکٹ", reportRows, completedRecords);
 }
@@ -1420,7 +1928,7 @@ $("tabs").addEventListener("click", event => {
   if (!tab || (tab !== "entry" && me.role !== "admin")) return;
   document.querySelectorAll("#tabs button").forEach(button => button.classList.toggle("active", button === event.target));
   ["entry", "report", "users", "log", "settings"].forEach(name => $("tab-" + name).classList.toggle("hidden", name !== tab));
-  if (tab === "report") renderReport();
+  if (tab === "report") { fillReportFilters(); renderReport(); }
   if (tab === "users") renderUsers();
   if (tab === "log") renderLog();
   if (tab === "settings") $("aName").value = me.username;
@@ -1518,6 +2026,7 @@ function renderUsers() {
         ${user.id === me.id ? "" : `<button class="link del" data-act="del" data-id="${esc(user.id)}">حذف</button>`}</td></tr>`;
     }).join("") || `<tr><td colspan="5" class="center">کوئی یوزر نہیں ملا</td></tr>`) + "</tbody>";
   fillEntryUsers();
+  fillReportUsers();
 }
 
 ["uSearch", "uFilterRole", "uFilterProvince", "uFilterStatus"].forEach(id => {
