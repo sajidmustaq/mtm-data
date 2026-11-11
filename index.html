@@ -3,26 +3,34 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://www.gstatic.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src 'self' data:; connect-src 'self' https://www.gstatic.com https://*.googleapis.com https://*.firebaseio.com https://*.firebaseapp.com https://*.cloudfunctions.net wss://*.firebaseio.com; frame-src 'self' https://mtm-data.firebaseapp.com; object-src 'none'; base-uri 'none'; form-action 'self'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://www.gstatic.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src 'self' data:; connect-src 'self' https://www.gstatic.com https://*.googleapis.com https://*.firebaseio.com https://*.firebaseapp.com https://*.cloudfunctions.net wss://*.firebaseio.com; frame-src 'self' https://student-portal-5dd94.firebaseapp.com; object-src 'none'; base-uri 'none'; form-action 'self'">
 <meta name="referrer" content="strict-origin-when-cross-origin">
-<title>مدرسین تصدیق نظام</title>
+<title>MTM Data</title>
 <link rel="icon" href="data:,">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Noto+Naskh+Arabic:wght@400;600;700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="style.css">
+<link rel="stylesheet" href="style.css?v=20261111-v2">
 </head>
 <body>
 
+<!-- لوڈنگ -->
+<div id="bootView" class="login-wrap">
+  <div class="login-box center loader-inline">
+    <span class="spinner" aria-hidden="true"></span>
+    <span>لوڈ ہو رہا ہے...</span>
+  </div>
+</div>
+
 <!-- لاگ اِن -->
-<div id="loginView" class="login-wrap">
+<div id="loginView" class="login-wrap hidden">
   <form id="loginForm" class="login-box" autocomplete="off">
-    <h1>مدرسین تصدیق نظام</h1>
-    <label for="lUser">یوزر آئی ڈی</label>
+    <h1>MTM Data</h1>
+    <label for="lUser">User ID</label>
     <input type="text" id="lUser" autocomplete="username" required>
-    <label for="lPass">پاس ورڈ</label>
+    <label for="lPass">Password</label>
     <input type="password" id="lPass" autocomplete="current-password" required>
-    <label class="inline pw-show"><input type="checkbox" id="showPass"> پاس ورڈ دکھائیں</label>
-    <button type="submit" class="btn" id="lBtn">لاگ اِن</button>
+    <label class="inline pw-show"><input type="checkbox" id="showPass"> Show Password</label>
+    <button type="submit" class="btn" id="lBtn">Log In</button>
     <p id="loginErr" class="err"></p>
   </form>
 </div>
@@ -30,10 +38,10 @@
 <!-- مین ایپ -->
 <div id="appView" class="hidden">
   <header class="topbar">
-    <div class="title">مدرسین تصدیق نظام</div>
+    <div class="title">MTM Data</div>
     <div class="who">
       <span id="whoLabel"></span>
-      <button class="btn-light" id="logoutBtn">لاگ آؤٹ</button>
+      <button class="btn-light" id="logoutBtn">Log Out</button>
     </div>
   </header>
 
@@ -51,10 +59,12 @@
       <div class="summary" id="miniSummary"></div>
 
       <div class="toolbar">
-        <input type="text" id="fSearch" placeholder="نام، کوڈ یا ولدیت سے تلاش">
-        <select id="fProvince" class="admin-only"></select>
+        <input type="text" id="fSearch" placeholder="نام، کوڈ، ولدیت یا شاخ سے تلاش">
+        <select id="fProvince"></select>
         <select id="fDivision"></select>
         <select id="fDistrict"></select>
+        <select id="fBranch"></select>
+        <select id="fDuty"></select>
         <label class="admin-only entry-owner">انٹری دیکھیں <select id="entryUser"></select></label>
         <select id="fStatus">
           <option value="">تمام</option>
@@ -62,6 +72,7 @@
           <option value="done">مکمل</option>
         </select>
         <span class="spacer"></span>
+        <button class="btn-light" id="refreshBtn" title="سرور سے تازہ ڈیٹا لوڈ کریں">تازہ کریں</button>
         <button class="btn" id="exportBtn">ایکسل ایکسپورٹ</button>
         <label class="btn admin-only" for="importFile">امپورٹ (ایکسل / JSON)</label>
         <input type="file" id="importFile" accept=".xlsx,.xls,.csv,.json" hidden>
@@ -81,11 +92,12 @@
               <th>ڈسٹرکٹ</th>
               <th>ڈویژن</th>
               <th class="admin-only">صوبہ</th>
-              <th>آفیشل منٹ</th>
-              <th>گریڈ</th>
-              <th>اجارے کے منٹ</th>
-              <th>کیا حقیقتاً حفظ کا درجہ پڑھا رہے ہیں؟</th>
-              <th>کیا حقیقتاً ناظرہ کا درجہ پڑھا رہے ہیں؟</th>
+              <th class="admin-only">آفیشل منٹ</th>
+              <th class="admin-only">گریڈ</th>
+              <th class="admin-only">اجارے کے منٹ</th>
+            <th>حفظ کی تدریس؟</th>
+<th>ناظرہ کی تدریس؟</th>
+              <th>عمل</th>
             </tr>
           </thead>
           <tbody></tbody>
@@ -108,6 +120,18 @@
     <section id="tab-users" class="hidden">
       <div class="toolbar">
         <h2 style="margin:0">یوزرز</h2>
+        <input type="text" id="uSearch" placeholder="یوزر آئی ڈی یا علاقہ تلاش کریں">
+        <select id="uFilterRole">
+          <option value="">تمام کردار</option>
+          <option value="user">یوزر</option>
+          <option value="admin">ایڈمن</option>
+        </select>
+        <select id="uFilterProvince"></select>
+        <select id="uFilterStatus">
+          <option value="">تمام حالت</option>
+          <option value="active">فعال</option>
+          <option value="inactive">بند</option>
+        </select>
         <span class="spacer"></span>
         <button class="btn" id="addUserBtn">نیا یوزر</button>
       </div>
@@ -166,7 +190,29 @@
   </form>
 </dialog>
 
+<!-- تصدیقِ جمع ڈائیلاگ -->
+<dialog id="confirmDlg" class="confirm-dlg">
+  <div class="confirm-head">
+    <span id="confirmIcon" class="confirm-icon">⚠️</span>
+    <h3 id="confirmTitle">تصدیقِ اندراج</h3>
+  </div>
+  <div id="confirmMsg" class="confirm-msg"></div>
+  <div id="confirmDetails" class="confirm-details hidden"></div>
+  <div class="dlg-actions confirm-actions">
+    <button type="button" class="btn" id="confirmOkBtn">ہاں، جمع کریں</button>
+    <button type="button" class="btn-light" id="confirmCancelBtn">منسوخ کریں</button>
+  </div>
+</dialog>
+
+<!-- گلوبل لوڈر -->
+<div id="globalLoader" class="loader-overlay hidden" role="status" aria-live="polite">
+  <div class="loader-card">
+    <span class="spinner spinner-lg" aria-hidden="true"></span>
+    <div id="loaderText" class="loader-text">براہِ کرم انتظار کریں...</div>
+  </div>
+</div>
+
 <script src="xlsx.full.min.js"></script>
-<script type="module" src="app.js"></script>
+<script type="module" src="app.js?v=20261111-v6"></script>
 </body>
 </html>

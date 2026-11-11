@@ -4,9 +4,9 @@ The app is static-hosted, but login, user management, assigned records, and entr
 
 ## One-time Firebase setup
 
-1. In Firebase Console for `mtm-data`, enable **Authentication → Email/Password** and create a **Cloud Firestore** database.
+1. In Firebase Console for `student-portal-5dd94`, enable **Authentication → Email/Password** and create a **Cloud Firestore** database.
 2. Create the first admin under **Authentication → Users**:
-   - Email: `admin@mtm-data.firebaseapp.com`
+   - Email: `admin@student-portal-5dd94.firebaseapp.com`
    - Password: choose a strong initial password.
    - Copy the new user's UID.
 3. In Firestore, create `users/{UID}` with these fields:

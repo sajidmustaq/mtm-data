@@ -10,7 +10,7 @@ initializeApp();
 setGlobalOptions({ region: "us-central1", maxInstances: 10, timeoutSeconds: 300 });
 const db = getFirestore();
 const auth = getAuth();
-const EMAIL_DOMAIN = "mtm-data.firebaseapp.com";
+const EMAIL_DOMAIN = "student-portal-5dd94.firebaseapp.com";
 const usernamePattern = /^[A-Za-z0-9_.-]{3,30}$/;
 
 function authEmail(username) {
@@ -54,10 +54,10 @@ function validateAssignments(assignments, role) {
         !Array.isArray(item.divisions) || item.divisions.some(d => typeof d !== "string")) {
       throw new HttpsError("invalid-argument", "صوبہ/ڈویژن اسائنمنٹ درست نہیں۔");
     }
-    const province = item.province.trim();
+    const province = item.province.normalize("NFC").trim();
     if (seen.has(province)) throw new HttpsError("invalid-argument", "ایک صوبہ ایک سے زیادہ مرتبہ منتخب ہے۔");
     seen.add(province);
-    return { province, divisions: [...new Set(item.divisions)].slice(0, 100) };
+    return { province, divisions: [...new Set(item.divisions.map(d => d.normalize("NFC")))].slice(0, 100) };
   });
 }
 
@@ -96,11 +96,13 @@ async function syncRecordAssignments(uid, assignments) {
   });
   desired.forEach((ref, id) => updates.set(id, { ref, add: true }));
   const list = [...updates.values()];
+  const nowMs = Date.now();
   for (let offset = 0; offset < list.length; offset += 400) {
     const batch = db.batch();
     list.slice(offset, offset + 400).forEach(item => {
       batch.update(item.ref, {
-        assignedTo: item.add ? FieldValue.arrayUnion(uid) : FieldValue.arrayRemove(uid)
+        assignedTo: item.add ? FieldValue.arrayUnion(uid) : FieldValue.arrayRemove(uid),
+        updatedAtMs: nowMs
       });
     });
     await batch.commit();
@@ -113,7 +115,7 @@ async function countOtherActiveAdmins(exceptUid) {
   return admins.docs.filter(snapshot => snapshot.id !== exceptUid).length;
 }
 
-exports.manageUser = onCall(async request => {
+exports.manageUser = onCall({ cors: true }, async request => {
   await requireAdmin(request);
   const { action, uid } = request.data || {};
 
@@ -209,7 +211,7 @@ exports.manageUser = onCall(async request => {
   return { id: uid, ...next };
 });
 
-exports.manageSelf = onCall(async request => {
+exports.manageSelf = onCall({ cors: true }, async request => {
   if (!request.auth) throw new HttpsError("unauthenticated", "لاگ اِن درکار ہے۔");
   const snapshot = await db.doc(`users/${request.auth.uid}`).get();
   if (!snapshot.exists || snapshot.data().active !== true || snapshot.data().role !== "admin") {

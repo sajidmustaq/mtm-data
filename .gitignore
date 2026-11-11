@@ -1,4 +1,7 @@
 /data.json
+*-adminsdk-*.json
+/setup_admin.mjs
+/admin_cli.mjs
 /functions/node_modules/
 node_modules/
 .firebase/

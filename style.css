@@ -60,7 +60,7 @@ input:focus, select:focus { outline: 2px solid var(--main); outline-offset: -1px
 
 .btn, .btn-light {
   font: inherit; padding: 7px 16px; cursor: pointer; border: 1px solid var(--main);
-  display: inline-block;
+  display: inline-flex; align-items: center; justify-content: center; gap: 6px;
 }
 .btn { background: var(--main); color: #fff; }
 .btn:hover { background: var(--main-dark); }
@@ -122,6 +122,109 @@ label.inline input { width: auto; margin: 0; }
 .entry-owner { display: flex; align-items: center; gap: 6px; }
 .entry-owner select { min-width: 130px; }
 .dlg-actions { display: flex; gap: 8px; margin-top: 12px; }
+
+.row-submit-btn { padding: 5px 12px; font-size: 14px; border-radius: 4px; }
+.submitted-tag { color: var(--main); border-color: var(--main); background: #eef3f0; font-weight: 700; border-radius: 4px; }
+.pending-tag { color: var(--warn); border-color: var(--warn); background: #fdf8ed; border-radius: 4px; }
+
+dialog.confirm-dlg {
+  width: min(460px, 94vw);
+  border-radius: 10px;
+  padding: 22px 24px;
+  box-shadow: 0 18px 45px rgba(0, 0, 0, .22);
+}
+dialog.confirm-dlg::backdrop {
+  background: rgba(0, 0, 0, .45);
+  backdrop-filter: blur(2px);
+}
+.confirm-head { display: flex; align-items: center; gap: 10px; }
+.confirm-head h3 { margin: 0; font-size: 20px; }
+.confirm-icon {
+  width: 36px; height: 36px; border-radius: 50%;
+  background: #fef3c7; border: 1px solid #f59e0b;
+  display: inline-flex; align-items: center; justify-content: center;
+  font-size: 18px; flex-shrink: 0;
+}
+.confirm-msg {
+  background: #fffbeb;
+  border: 1px solid #f59e0b;
+  border-right: 4px solid var(--warn);
+  border-radius: 6px;
+  padding: 12px 14px;
+  margin: 14px 0 12px;
+  line-height: 1.75;
+  color: #451a03;
+  font-weight: 600;
+}
+.confirm-details {
+  background: #f8faf8;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  padding: 10px 14px;
+  margin-bottom: 14px;
+  font-size: 14px;
+  line-height: 1.8;
+}
+.confirm-actions { justify-content: flex-start; margin-top: 8px; }
+.confirm-actions .btn, .confirm-actions .btn-light { border-radius: 5px; }
+
+@keyframes spin { to { transform: rotate(360deg); } }
+.spinner {
+  display: inline-block;
+  width: 18px;
+  height: 18px;
+  border: 2.5px solid rgba(31, 95, 74, .2);
+  border-top-color: var(--main);
+  border-radius: 50%;
+  animation: spin .75s linear infinite;
+  vertical-align: middle;
+  flex-shrink: 0;
+}
+.spinner-sm {
+  width: 14px;
+  height: 14px;
+  border-width: 2px;
+}
+.btn .spinner {
+  border-color: rgba(255, 255, 255, .35);
+  border-top-color: #fff;
+}
+.spinner-lg {
+  width: 34px;
+  height: 34px;
+  border-width: 3.5px;
+}
+.loader-inline {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+}
+.loader-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, .35);
+  backdrop-filter: blur(2px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 9999;
+}
+.loader-card {
+  background: #fff;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 20px 28px;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  box-shadow: 0 14px 36px rgba(0, 0, 0, .2);
+  min-width: 220px;
+}
+.loader-text {
+  font-weight: 700;
+  color: var(--main-dark);
+}
 
 @media (max-width: 700px) {
   .topbar { flex-direction: column; gap: 6px; }

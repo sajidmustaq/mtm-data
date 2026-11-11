@@ -2,34 +2,54 @@
 
 import { initializeApp } from "https://www.gstatic.com/firebasejs/13.2.0/firebase-app.js";
 import {
-  browserSessionPersistence, EmailAuthProvider, initializeAuth, onAuthStateChanged,
-  reauthenticateWithCredential, signInWithEmailAndPassword, signOut, updatePassword
+  browserLocalPersistence, browserSessionPersistence, createUserWithEmailAndPassword,
+  EmailAuthProvider, indexedDBLocalPersistence, initializeAuth, inMemoryPersistence,
+  onAuthStateChanged, reauthenticateWithCredential, signInWithEmailAndPassword,
+  signOut, updatePassword
 } from "https://www.gstatic.com/firebasejs/13.2.0/firebase-auth.js";
 import {
-  addDoc, collection, doc, getDoc, getDocs, getFirestore, limit, onSnapshot, orderBy, query,
-  serverTimestamp, setDoc, where, writeBatch
+  addDoc, arrayRemove, arrayUnion, collection, deleteDoc, doc, getCountFromServer,
+  getDocFromCache, getDocFromServer, getDocs, getDocsFromCache, getDocsFromServer,
+  getFirestore, initializeFirestore, limit, onSnapshot, orderBy, persistentLocalCache,
+  persistentMultipleTabManager, query, serverTimestamp, setDoc, where, writeBatch
 } from "https://www.gstatic.com/firebasejs/13.2.0/firebase-firestore.js";
-import { getFunctions, httpsCallable } from "https://www.gstatic.com/firebasejs/13.2.0/firebase-functions.js";
 
 const firebaseConfig = {
-  apiKey: "AIzaSyBAnPSD2XhLOTnupNMwwo9-GmJrOg8MotM",
-  authDomain: "mtm-data.firebaseapp.com",
-  projectId: "mtm-data",
-  storageBucket: "mtm-data.firebasestorage.app",
-  messagingSenderId: "649943045136",
-  appId: "1:649943045136:web:e5504c105dcfd3cd152695"
+  apiKey: "AIzaSyDfu50nkc3YrIw80QEwQP2Sqlx2Dpb1Wpk",
+  authDomain: "student-portal-5dd94.firebaseapp.com",
+  projectId: "student-portal-5dd94",
+  storageBucket: "student-portal-5dd94.firebasestorage.app",
+  messagingSenderId: "676699117940",
+  appId: "1:676699117940:web:790a46517353937f03b421"
 };
+const EMAIL_DOMAIN = "student-portal-5dd94.firebaseapp.com";
 const app = initializeApp(firebaseConfig);
-const auth = initializeAuth(app, { persistence: browserSessionPersistence });
-const db = getFirestore(app);
-const functions = getFunctions(app, "us-central1");
-const manageUser = httpsCallable(functions, "manageUser");
-const manageSelf = httpsCallable(functions, "manageSelf");
+const auth = initializeAuth(app, {
+  persistence: [indexedDBLocalPersistence, browserLocalPersistence, browserSessionPersistence]
+});
+let db;
+try {
+  db = initializeFirestore(app, {
+    localCache: persistentLocalCache({ tabManager: persistentMultipleTabManager() })
+  });
+} catch {
+  db = getFirestore(app);
+}
+let creatorAuth = null;
+function getCreatorAuth() {
+  if (!creatorAuth) {
+    const creatorApp = initializeApp(firebaseConfig, "userCreator");
+    creatorAuth = initializeAuth(creatorApp, { persistence: inMemoryPersistence });
+  }
+  return creatorAuth;
+}
 const YES = "جی ہاں", NO = "جی نہیں", PAGE_SIZE = 50, IDLE_MS = 15 * 60 * 1000;
+const RECORD_CACHE_TTL_MS = 6 * 60 * 60 * 1000;
+const nfc = v => String(v ?? "").normalize("NFC");
 const K = {
   code: "عملہ کوڈ", name: "نام", father: "ولدیت", branch: "شاخ", duty: "ذمہ داری",
   district: "ڈسٹرکٹ", division: "سرکاری ڈویژن", province: "صوبائی/انتظامی اکائی",
-  offMin: "آفیشل منٹ", grade: "گریڈ", ijaraMin: "اجارے کے منٹ",
+  offMin: "آفیشل منٹ", grade: "گریڈ", ijaraMin: "اجارے کے منٹ",
   hifz: "کیا یہ مدرس حقیتا حفظ کا درجہ بڑھا رہے ہیں",
   nazra: "کیا یہ حقیقتا ناظرہ کا درجہ  پڑھا رہےہیں"
 };
@@ -40,7 +60,7 @@ const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({
   "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;"
 }[c]));
 const nowStr = () => new Date().toLocaleString("en-GB", { hour12: false });
-const userEmail = username => `${username.trim().toLowerCase()}@mtm-data.firebaseapp.com`;
+const userEmail = username => `${username.trim().toLowerCase()}@${EMAIL_DOMAIN}`;
 const pwProblem = (pw, username) => {
   if (pw.length < 8) return "پاس ورڈ کم از کم 8 حروف کا ہو";
   if (!/[A-Za-z]/.test(pw) || !/\d/.test(pw)) return "پاس ورڈ میں حروف اور ہندسے دونوں ہوں";
@@ -51,11 +71,48 @@ const pwProblem = (pw, username) => {
 const nameProblem = n => /^[A-Za-z0-9_.-]{3,30}$/.test(n) ? "" : "یوزر نیم 3 سے 30 حروف: انگریزی حروف، ہندسے، _ . -";
 const recordId = r => encodeURIComponent(`${r[K.code]}|${r[K.province]}`);
 const isDone = r => !!r?.[K.hifz] && !!r?.[K.nazra];
-const clean = v => String(v ?? "").replace(/[\u0000-\u001f\u007f]/g, " ").trim().slice(0, 200);
+const clean = v => nfc(v).replace(/[\u0000-\u001f\u007f]/g, " ").trim().slice(0, 200);
 
-let me = null, DATA = [], USERS = [], ENTRIES = [], LOG = [], usersLoaded = false;
+let me = null, DATA = [], USERS = [], ENTRIES = [], LOG = [], usersLoaded = false, entriesLoaded = false;
 let page = 1, editingId = null, unsubscribers = [], lastActive = Date.now(), loggingOut = false;
-let provinces = [];
+let provinces = [], RECORD_DOCS = new Map(), DRAFT_ENTRIES = new Map(), recordsLoading = false, pendingScopeSelection = null;
+let loaderCount = 0;
+
+function showLoader(text = "براہِ کرم انتظار کریں...") {
+  loaderCount++;
+  if ($("loaderText")) $("loaderText").textContent = text;
+  $("globalLoader")?.classList.remove("hidden");
+}
+
+function hideLoader() {
+  loaderCount = Math.max(0, loaderCount - 1);
+  if (!loaderCount) $("globalLoader")?.classList.add("hidden");
+}
+
+async function withLoader(text, fn) {
+  showLoader(text);
+  try {
+    return await fn();
+  } finally {
+    hideLoader();
+  }
+}
+
+function setButtonBusy(btn, busy, busyText = "") {
+  if (!btn) return;
+  if (busy) {
+    if (btn.dataset.origHtml === undefined) btn.dataset.origHtml = btn.innerHTML;
+    btn.disabled = true;
+    btn.innerHTML = `<span class="spinner spinner-sm" aria-hidden="true"></span><span>${esc(busyText || btn.textContent)}</span>`;
+  } else {
+    btn.disabled = false;
+    if (btn.dataset.origHtml !== undefined) {
+      btn.innerHTML = btn.dataset.origHtml;
+      delete btn.dataset.origHtml;
+    }
+  }
+}
+
 
 function showError(message) {
   $("loginErr").textContent = message;
@@ -77,8 +134,10 @@ function normalizeRole(role) {
 
 function hasRegion(user, row) {
   if (user.role === "admin") return true;
-  return assignmentsForUser(user).some(a => a.province === row[K.province] &&
-    (!Array.isArray(a.divisions) || !a.divisions.length || a.divisions.includes(row[K.division])));
+  const prov = nfc(row[K.province]);
+  const div = nfc(row[K.division]);
+  return assignmentsForUser(user).some(a => nfc(a.province) === prov &&
+    (!Array.isArray(a.divisions) || !a.divisions.length || a.divisions.some(d => nfc(d) === div)));
 }
 
 function visibleRows() {
@@ -107,10 +166,94 @@ function stopListeners() {
   unsubscribers = [];
 }
 
+function syncStorageKey(userId) {
+  return `mtm_rec_sync_${firebaseConfig.projectId}_${userId}`;
+}
+
+function rowFromDocData(id, raw) {
+  const rawData = raw?.data || {};
+  const byNfcKey = {};
+  for (const [key, val] of Object.entries(rawData)) {
+    byNfcKey[nfc(key).trim()] = nfc(val);
+  }
+  const normalized = {};
+  COLS.forEach(col => {
+    if (byNfcKey[nfc(col)] !== undefined) normalized[col] = byNfcKey[nfc(col)];
+  });
+  return { id, ...rawData, ...normalized, assignedTo: raw?.assignedTo || [] };
+}
+
+function applyRecordDocs() {
+  DATA = [...RECORD_DOCS.values()].map(raw => rowFromDocData(raw.id, raw));
+  provinces = [...new Set(DATA.map(r => r[K.province]).filter(Boolean))].sort();
+  fillProvinceSelects();
+  fillUserProvinceFilter();
+  fillScopeChecks();
+  refreshAll();
+}
+
+async function loadRecords(user, forceServer = false) {
+  if (!user) return;
+  recordsLoading = true;
+  try {
+    const recordQuery = user.role === "admin"
+      ? collection(db, "records")
+      : query(collection(db, "records"), where("assignedTo", "array-contains", user.id));
+    const key = syncStorageKey(user.id);
+    const lastSyncMs = Number(localStorage.getItem(key) || 0);
+
+    if (!forceServer && lastSyncMs > 0) {
+      try {
+        const cachedSnap = await getDocsFromCache(recordQuery);
+        if (!me || me.id !== user.id) return;
+        if (!cachedSnap.empty) {
+          RECORD_DOCS = new Map(cachedSnap.docs.map(d => [d.id, { id: d.id, ...d.data() }]));
+          recordsLoading = false;
+          applyRecordDocs();
+
+          const countSnap = await getCountFromServer(recordQuery);
+          if (!me || me.id !== user.id) return;
+          const serverCount = countSnap.data().count;
+          if (serverCount === cachedSnap.size) {
+            if (user.role === "admin") {
+              const deltaSnap = await getDocsFromServer(
+                query(collection(db, "records"), where("updatedAtMs", ">", lastSyncMs))
+              );
+              if (!me || me.id !== user.id) return;
+              if (!deltaSnap.empty) {
+                deltaSnap.docs.forEach(d => RECORD_DOCS.set(d.id, { id: d.id, ...d.data() }));
+                applyRecordDocs();
+              }
+              localStorage.setItem(key, String(Math.max(0, Date.now() - 10000)));
+              return;
+            }
+            if (Date.now() - lastSyncMs < RECORD_CACHE_TTL_MS) {
+              return;
+            }
+          }
+        }
+      } catch (cacheErr) {
+        console.warn("Cache read skipped, falling back to server:", cacheErr);
+      }
+    }
+
+    const serverSnap = await withLoader("ریکارڈز لوڈ ہو رہے ہیں...", () => getDocsFromServer(recordQuery));
+    if (!me || me.id !== user.id) return;
+    RECORD_DOCS = new Map(serverSnap.docs.map(d => [d.id, { id: d.id, ...d.data() }]));
+    localStorage.setItem(key, String(Math.max(0, Date.now() - 10000)));
+    recordsLoading = false;
+    applyRecordDocs();
+  } finally {
+    recordsLoading = false;
+  }
+}
+
 function showApp(user) {
   me = user;
   lastActive = Date.now();
   loggingOut = false;
+  setButtonBusy($("lBtn"), false);
+  $("bootView")?.classList.add("hidden");
   $("loginView").classList.add("hidden");
   $("appView").classList.remove("hidden");
   const assignments = assignmentsForUser(user);
@@ -130,6 +273,7 @@ function showApp(user) {
       });
       usersLoaded = true;
       fillEntryUsers();
+      fillUserProvinceFilter();
       refreshAll();
       if (!$("tab-users").classList.contains("hidden")) renderUsers();
       fillScopeChecks();
@@ -142,24 +286,17 @@ function showApp(user) {
     USERS = [user];
     usersLoaded = true;
   }
-  const recordQuery = user.role === "admin"
-    ? collection(db, "records")
-    : query(collection(db, "records"), where("assignedTo", "array-contains", user.id));
-  unsubscribers.push(onSnapshot(recordQuery, snap => {
-    DATA = snap.docs.map(d => ({ id: d.id, ...d.data().data, assignedTo: d.data().assignedTo || [] }));
-    provinces = [...new Set(DATA.map(r => r[K.province]).filter(Boolean))].sort();
-    fillProvinceSelects();
-    fillScopeChecks();
-    refreshAll();
-  }, err => reportError("ڈیٹا لوڈ نہیں ہو سکا", err)));
+  loadRecords(user).catch(err => reportError("ڈیٹا لوڈ نہیں ہو سکا", err));
   const entryQuery = user.role === "admin"
     ? collection(db, "entries")
     : query(collection(db, "entries"), where("userId", "==", user.id));
   unsubscribers.push(onSnapshot(entryQuery, snap => {
     ENTRIES = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+    entriesLoaded = true;
     refreshAll();
   }, err => reportError("انٹریاں لوڈ نہیں ہو سکیں", err)));
   if (user.role === "admin") fillEntryUsers();
+  fillProvinceSelects();
   refreshAll();
 }
 
@@ -168,13 +305,40 @@ function resetLoginPassword() {
   $("lPass").type = "password";
 }
 
+function resetAllFilters() {
+  ["fSearch", "fProvince", "fDivision", "fDistrict", "fBranch", "fDuty", "fStatus",
+    "uSearch", "uFilterRole", "uFilterProvince", "uFilterStatus"].forEach(id => {
+    if ($(id)) $(id).value = "";
+  });
+  page = 1;
+}
+
 function returnToLogin(message = "") {
   stopListeners();
-  me = null; DATA = []; USERS = []; ENTRIES = []; LOG = []; usersLoaded = false; loggingOut = false;
+  me = null; DATA = []; USERS = []; ENTRIES = []; LOG = [];
+  usersLoaded = false; entriesLoaded = false; loggingOut = false; recordsLoading = false; pendingScopeSelection = null;
+  RECORD_DOCS.clear();
+  DRAFT_ENTRIES.clear();
+  resetAllFilters();
+  setButtonBusy($("lBtn"), false);
+  $("bootView")?.classList.add("hidden");
   $("appView").classList.add("hidden");
   $("loginView").classList.remove("hidden");
   resetLoginPassword();
   showError(message);
+}
+
+async function fetchUserProfile(uid) {
+  const userRef = doc(db, "users", uid);
+  try {
+    return await getDocFromServer(userRef);
+  } catch (error) {
+    if (error?.code === "unavailable" || /offline|network/i.test(String(error?.message || ""))) {
+      const cached = await getDocFromCache(userRef);
+      if (cached.exists()) return cached;
+    }
+    throw error;
+  }
 }
 
 
@@ -183,8 +347,10 @@ onAuthStateChanged(auth, async account => {
     returnToLogin();
     return;
   }
+  const showOverlay = $("bootView")?.classList.contains("hidden");
+  if (showOverlay) showLoader("لاگ اِن کی تصدیق ہو رہی ہے...");
   try {
-    const snapshot = await getDoc(doc(db, "users", account.uid));
+    const snapshot = await fetchUserProfile(account.uid);
     if (!snapshot.exists() || !snapshot.data().active) {
       await signOut(auth);
       returnToLogin("یہ اکاؤنٹ غیر فعال ہے یا ایڈمن نے ابھی بنایا نہیں۔");
@@ -197,7 +363,7 @@ onAuthStateChanged(auth, async account => {
     }
     const username = typeof profile.username === "string" && profile.username.trim()
       ? profile.username.trim()
-      : account.email?.endsWith("@mtm-data.firebaseapp.com")
+      : account.email?.endsWith(`@${EMAIL_DOMAIN}`)
         ? account.email.slice(0, account.email.indexOf("@"))
         : "";
     if (!username) throw new Error("یوزر پروفائل میں username موجود نہیں، اور Authentication اکاؤنٹ میں قابلِ شناخت یوزر آئی ڈی نہیں۔");
@@ -206,8 +372,15 @@ onAuthStateChanged(auth, async account => {
   } catch (error) {
     await signOut(auth);
     returnToLogin(`اکاؤنٹ کی معلومات نہیں مل سکیں: ${error.message}`);
+  } finally {
+    if (showOverlay) hideLoader();
   }
-}, error => showError(`Firebase لاگ اِن تیار نہیں: ${error.message}`));
+}, error => {
+  setButtonBusy($("lBtn"), false);
+  $("bootView")?.classList.add("hidden");
+  $("loginView").classList.remove("hidden");
+  showError(`Firebase لاگ اِن تیار نہیں: ${error.message}`);
+});
 
 $("showPass").addEventListener("change", () => {
   $("lPass").type = $("showPass").checked ? "text" : "password";
@@ -219,7 +392,7 @@ $("loginForm").addEventListener("submit", async event => {
   const password = $("lPass").value;
   const problem = nameProblem(username);
   if (problem) { showError(problem); return; }
-  $("lBtn").disabled = true;
+  setButtonBusy($("lBtn"), true, "لاگ اِن ہو رہا ہے...");
   showError("");
   try {
     await auth.authStateReady();
@@ -227,18 +400,19 @@ $("loginForm").addEventListener("submit", async event => {
     $("lPass").value = "";
     resetLoginPassword();
   } catch (error) {
+    setButtonBusy($("lBtn"), false);
     showError(error.code === "auth/too-many-requests"
       ? "بہت سی ناکام کوششیں؛ کچھ دیر بعد دوبارہ کوشش کریں۔"
       : "یوزر آئی ڈی یا پاس ورڈ درست نہیں۔");
-  } finally {
-    $("lBtn").disabled = false;
   }
 });
 
 $("logoutBtn").addEventListener("click", async () => {
   try {
-    await saveLog("لاگ آؤٹ");
-    await signOut(auth);
+    await withLoader("لاگ آؤٹ ہو رہا ہے...", async () => {
+      await saveLog("لاگ آؤٹ");
+      await signOut(auth);
+    });
   } catch (error) {
     reportError("لاگ آؤٹ مکمل نہیں ہو سکا", error);
   }
@@ -262,10 +436,15 @@ setInterval(async () => {
 }, 15000);
 
 function fillProvinceSelects() {
+  if (!me) return;
+  const provList = me.role === "admin"
+    ? provinces
+    : [...new Set(visibleRows().map(r => r[K.province]).filter(Boolean))].sort();
   const current = $("fProvince").value;
   $("fProvince").innerHTML = '<option value="">تمام صوبے</option>' +
-    provinces.map(p => `<option value="${esc(p)}">${esc(p)}</option>`).join("");
-  if (provinces.includes(current)) $("fProvince").value = current;
+    provList.map(p => `<option value="${esc(p)}">${esc(p)}</option>`).join("");
+  if (provList.includes(current)) $("fProvince").value = current;
+  $("fProvince").classList.toggle("hidden", me.role !== "admin" && provList.length <= 1);
 }
 
 function fillFilter(select, label, values) {
@@ -277,25 +456,35 @@ function fillFilter(select, label, values) {
 
 function fillFilters() {
   let rows = visibleRows();
-  if (me.role === "admin" && $("fProvince").value) rows = rows.filter(r => r[K.province] === $("fProvince").value);
+  if (!$("fProvince").classList.contains("hidden") && $("fProvince").value) {
+    rows = rows.filter(r => r[K.province] === $("fProvince").value);
+  }
   const unique = field => [...new Set(rows.map(r => r[field]).filter(Boolean))].sort();
   fillFilter($("fDivision"), "تمام ڈویژنز", unique(K.division));
   if ($("fDivision").value) rows = rows.filter(r => r[K.division] === $("fDivision").value);
   fillFilter($("fDistrict"), "تمام اضلاع", unique(K.district));
+  if ($("fDistrict").value) rows = rows.filter(r => r[K.district] === $("fDistrict").value);
+  fillFilter($("fBranch"), "تمام شاخیں", unique(K.branch));
+  if ($("fBranch").value) rows = rows.filter(r => r[K.branch] === $("fBranch").value);
+  fillFilter($("fDuty"), "تمام ذمہ داریاں", unique(K.duty));
 }
 
 function filteredRows() {
-  const search = $("fSearch").value.trim();
-  const province = me.role === "admin" ? $("fProvince").value : "";
-  const division = $("fDivision").value, district = $("fDistrict").value, status = $("fStatus").value;
+  const search = $("fSearch").value.trim().toLowerCase();
+  const province = $("fProvince").classList.contains("hidden") ? "" : $("fProvince").value;
+  const division = $("fDivision").value, district = $("fDistrict").value;
+  const branch = $("fBranch").value, duty = $("fDuty").value, status = $("fStatus").value;
   return visibleRows().filter(row => {
     if (province && row[K.province] !== province) return false;
     if (division && row[K.division] !== division) return false;
     if (district && row[K.district] !== district) return false;
+    if (branch && row[K.branch] !== branch) return false;
+    if (duty && row[K.duty] !== duty) return false;
     const entry = entryFor(row);
     if (status === "done" && !isDone(entry)) return false;
     if (status === "pending" && isDone(entry)) return false;
-    if (search && ![row[K.name], row[K.code], row[K.father]].some(v => String(v || "").includes(search))) return false;
+    if (search && ![row[K.name], row[K.code], row[K.father], row[K.branch], row[K.duty]]
+      .some(v => String(v || "").toLowerCase().includes(search))) return false;
     return true;
   });
 }
@@ -303,6 +492,41 @@ function filteredRows() {
 const opts = value => `<option value="">-- منتخب کریں --</option>` +
   `<option value="${YES}" ${value === YES ? "selected" : ""}>${YES}</option>` +
   `<option value="${NO}" ${value === NO ? "selected" : ""}>${NO}</option>`;
+
+function isEntryLocked(entry) {
+  return !!(entry && (entry.submitted === true || (entry[K.hifz] && entry[K.nazra])));
+}
+
+function showConfirmModal({ icon = "⚠️", title = "تصدیقِ اندراج", message = "", detailsHtml = "", okText = "ہاں، جمع کریں", cancelText = "منسوخ کریں", showCancel = true }) {
+  return new Promise(resolve => {
+    const dlg = $("confirmDlg");
+    $("confirmIcon").textContent = icon;
+    $("confirmTitle").textContent = title;
+    $("confirmMsg").textContent = message;
+    if (detailsHtml) {
+      $("confirmDetails").innerHTML = detailsHtml;
+      $("confirmDetails").classList.remove("hidden");
+    } else {
+      $("confirmDetails").innerHTML = "";
+      $("confirmDetails").classList.add("hidden");
+    }
+    $("confirmOkBtn").textContent = okText;
+    $("confirmCancelBtn").textContent = cancelText;
+    $("confirmCancelBtn").classList.toggle("hidden", !showCancel);
+
+    const cleanup = result => {
+      $("confirmOkBtn").onclick = null;
+      $("confirmCancelBtn").onclick = null;
+      dlg.oncancel = null;
+      if (dlg.open) dlg.close();
+      resolve(result);
+    };
+    $("confirmOkBtn").onclick = () => cleanup(true);
+    $("confirmCancelBtn").onclick = () => cleanup(false);
+    dlg.oncancel = event => { event.preventDefault(); cleanup(false); };
+    dlg.showModal();
+  });
+}
 
 function renderTable() {
   if (!me) return;
@@ -312,18 +536,33 @@ function renderTable() {
   const slice = rows.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
   const ownerId = entryOwnerId();
   const canEdit = ownerId === me.id;
+  const isAdmin = me.role === "admin";
   $("dataTable").querySelector("tbody").innerHTML = slice.map((row, i) => {
-    const entry = entryFor(row, ownerId) || {};
-    return `<tr class="${isDone(entry) ? "done" : "pending"}">
+    const saved = entryFor(row, ownerId) || {};
+    const locked = isEntryLocked(saved);
+    const editable = canEdit && (!locked || isAdmin);
+    const entry = editable && DRAFT_ENTRIES.has(row.id) ? DRAFT_ENTRIES.get(row.id) : saved;
+    let actionCell;
+    if (!canEdit) {
+      actionCell = locked ? '<span class="tag submitted-tag">✓ جمع شدہ</span>' : '<span class="tag pending-tag">باقی</span>';
+    } else if (locked && !isAdmin) {
+      actionCell = '<span class="tag submitted-tag">✓ جمع شدہ</span>';
+    } else if (locked && isAdmin) {
+      actionCell = `<span class="tag submitted-tag">✓ جمع شدہ</span> <button type="button" class="btn-light row-submit-btn" data-act="submit-row" data-id="${esc(row.id)}">اپڈیٹ</button>`;
+    } else {
+      actionCell = `<button type="button" class="btn row-submit-btn" data-act="submit-row" data-id="${esc(row.id)}">جمع کریں</button>`;
+    }
+    return `<tr class="${isDone(saved) ? "done" : "pending"}">
       <td>${(page - 1) * PAGE_SIZE + i + 1}</td>
       <td>${esc(row[K.code])}</td><td>${esc(row[K.name])}</td><td>${esc(row[K.father])}</td>
       <td>${esc(row[K.branch])}</td><td>${esc(row[K.duty])}</td><td>${esc(row[K.district])}</td>
-      <td>${esc(row[K.division])}</td>${me.role === "admin" ? `<td>${esc(row[K.province])}</td>` : ""}
-      <td>${esc(row[K.offMin])}</td><td>${esc(row[K.grade])}</td><td>${esc(row[K.ijaraMin])}</td>
-      <td><select ${canEdit ? "" : "disabled"} class="${entry[K.hifz] ? "" : "empty"}" data-id="${esc(row.id)}" data-f="hifz">${opts(entry[K.hifz])}</select></td>
-      <td><select ${canEdit ? "" : "disabled"} class="${entry[K.nazra] ? "" : "empty"}" data-id="${esc(row.id)}" data-f="nazra">${opts(entry[K.nazra])}</select></td>
+      <td>${esc(row[K.division])}</td>${isAdmin ? `<td>${esc(row[K.province])}</td>` : ""}
+      ${isAdmin ? `<td>${esc(row[K.offMin])}</td><td>${esc(row[K.grade])}</td><td>${esc(row[K.ijaraMin])}</td>` : ""}
+      <td><select ${editable ? "" : "disabled"} class="${entry[K.hifz] ? "" : "empty"}" data-id="${esc(row.id)}" data-f="hifz">${opts(entry[K.hifz])}</select></td>
+      <td><select ${editable ? "" : "disabled"} class="${entry[K.nazra] ? "" : "empty"}" data-id="${esc(row.id)}" data-f="nazra">${opts(entry[K.nazra])}</select></td>
+      <td>${actionCell}</td>
     </tr>`;
-  }).join("") || `<tr><td colspan="14" class="center">کوئی ریکارڈ نہیں ملا</td></tr>`;
+  }).join("") || `<tr><td colspan="${isAdmin ? 15 : 11}" class="center">کوئی ریکارڈ نہیں ملا</td></tr>`;
   $("pager").innerHTML = `<button id="pPrev" ${page <= 1 ? "disabled" : ""}>پچھلا</button>
     <span>صفحہ ${page} / ${pages} &nbsp;(کل ${rows.length})</span>
     <button id="pNext" ${page >= pages ? "disabled" : ""}>اگلا</button>`;
@@ -353,12 +592,12 @@ function fixPair(entry, changed) {
   else if (!changed && entry[K.nazra] === YES) entry[K.hifz] = NO;
 }
 
-$("dataTable").addEventListener("change", async event => {
+$("dataTable").addEventListener("change", event => {
   const select = event.target;
   if (select.tagName !== "SELECT" || !select.dataset.id) return;
   const row = DATA.find(r => r.id === select.dataset.id);
-  if (!row || (me.role !== "admin" && !row.assignedTo?.includes(me.id)) || entryOwnerId() !== me.id) {
-    alert("اس ریکارڈ میں تبدیلی کی اجازت نہیں");
+  const saved = row ? (entryFor(row, me.id) || {}) : {};
+  if (!row || (me.role !== "admin" && (!row.assignedTo?.includes(me.id) || isEntryLocked(saved))) || entryOwnerId() !== me.id) {
     refreshAll();
     return;
   }
@@ -366,28 +605,114 @@ $("dataTable").addEventListener("change", async event => {
     refreshAll();
     return;
   }
-  const previous = entryFor(row, me.id) || {};
-  const entry = {
-    recordId: row.id, userId: me.id,
-    [K.hifz]: previous[K.hifz] || "", [K.nazra]: previous[K.nazra] || ""
+  const current = DRAFT_ENTRIES.get(row.id) || {
+    [K.hifz]: saved[K.hifz] || "", [K.nazra]: saved[K.nazra] || ""
   };
-  entry[K[select.dataset.f]] = select.value;
-  fixPair(entry, select.dataset.f);
-  entry.updatedBy = me.username;
-  entry.updatedAt = nowStr();
-  try {
-    await setDoc(doc(db, "entries", `${row.id}__${me.id}`), entry);
-    await saveLog("انٹری", `${row[K.code]} — حفظ: ${entry[K.hifz] || "-"}، ناظرہ: ${entry[K.nazra] || "-"}`);
-  } catch (error) {
-    reportError("انٹری محفوظ نہیں ہو سکی", error);
+  const draft = { [K.hifz]: current[K.hifz] || "", [K.nazra]: current[K.nazra] || "" };
+  draft[K[select.dataset.f]] = select.value;
+  fixPair(draft, select.dataset.f);
+  DRAFT_ENTRIES.set(row.id, draft);
+
+  const tr = select.closest("tr");
+  if (tr) {
+    const hifzSel = tr.querySelector('select[data-f="hifz"]');
+    const nazraSel = tr.querySelector('select[data-f="nazra"]');
+    if (hifzSel) {
+      hifzSel.value = draft[K.hifz];
+      hifzSel.classList.toggle("empty", !draft[K.hifz]);
+    }
+    if (nazraSel) {
+      nazraSel.value = draft[K.nazra];
+      nazraSel.classList.toggle("empty", !draft[K.nazra]);
+    }
   }
 });
 
-["fSearch", "fDistrict", "fStatus"].forEach(id =>
+$("dataTable").addEventListener("click", async event => {
+  const button = event.target.closest('button[data-act="submit-row"]');
+  if (!button) return;
+  const row = DATA.find(r => r.id === button.dataset.id);
+  const saved = row ? (entryFor(row, me.id) || {}) : {};
+  const isAdmin = me?.role === "admin";
+  if (!row || (!isAdmin && (!row.assignedTo?.includes(me.id) || isEntryLocked(saved))) || entryOwnerId() !== me.id) {
+    await showConfirmModal({
+      icon: "⛔", title: "اجازت نہیں",
+      message: "اس ریکارڈ میں تبدیلی کی اجازت نہیں ہے۔",
+      okText: "ٹھیک ہے", showCancel: false
+    });
+    refreshAll();
+    return;
+  }
+
+  const draft = DRAFT_ENTRIES.get(row.id) || {
+    [K.hifz]: saved[K.hifz] || "", [K.nazra]: saved[K.nazra] || ""
+  };
+  if (![YES, NO].includes(draft[K.hifz]) || ![YES, NO].includes(draft[K.nazra])) {
+    await showConfirmModal({
+      icon: "ℹ️", title: "نامکمل معلومات",
+      message: "براہِ کرم جمع کرانے سے پہلے حفظ اور ناظرہ دونوں سوالات کے جواب منتخب کریں۔",
+      okText: "ٹھیک ہے", showCancel: false
+    });
+    return;
+  }
+
+  const detailsHtml = `
+    <div><b>عملہ کوڈ:</b> ${esc(row[K.code])}</div>
+    <div><b>نام:</b> ${esc(row[K.name])} (${esc(row[K.father])})</div>
+    <div><b>حفظ کا درجہ:</b> ${esc(draft[K.hifz])}</div>
+    <div><b>ناظرہ کا درجہ:</b> ${esc(draft[K.nazra])}</div>
+  `;
+  const confirmed = await showConfirmModal({
+    icon: "⚠️",
+    title: "ڈیٹا جمع کرانے کی تصدیق",
+    message: "کیا آپ واقعی یہ ڈیٹا جمع کرنا چاہتے ہیں؟ کیونکہ بعد میں اس میں تبدیلی نہیں ہوگی۔",
+    detailsHtml,
+    okText: "ہاں، جمع کریں",
+    cancelText: "منسوخ کریں",
+    showCancel: true
+  });
+  if (!confirmed) return;
+
+  setButtonBusy(button, true, "محفوظ ہو رہا ہے...");
+  const now = nowStr();
+  const entry = {
+    recordId: row.id,
+    userId: me.id,
+    [K.hifz]: draft[K.hifz],
+    [K.nazra]: draft[K.nazra],
+    submitted: true,
+    submittedAt: saved.submittedAt || now,
+    updatedBy: me.username,
+    updatedAt: now
+  };
+  try {
+    await withLoader("ڈیٹا محفوظ ہو رہا ہے...", async () => {
+      await setDoc(doc(db, "entries", `${row.id}__${me.id}`), entry);
+      DRAFT_ENTRIES.delete(row.id);
+      await saveLog("انٹری جمع", `${row[K.code]} — حفظ: ${entry[K.hifz]}، ناظرہ: ${entry[K.nazra]}`);
+    });
+  } catch (error) {
+    setButtonBusy(button, false);
+    await showConfirmModal({
+      icon: "❌", title: "خرابی",
+      message: `انٹری محفوظ نہیں ہو سکی: ${error?.message || error}`,
+      okText: "ٹھیک ہے", showCancel: false
+    });
+  }
+});
+
+["fSearch", "fDuty", "fStatus"].forEach(id =>
   $(id).addEventListener("input", () => { page = 1; renderTable(); }));
-$("fDivision").addEventListener("change", () => { $("fDistrict").value = ""; page = 1; fillFilters(); renderTable(); });
+$("fBranch").addEventListener("change", () => { $("fDuty").value = ""; page = 1; fillFilters(); renderTable(); });
+$("fDistrict").addEventListener("change", () => {
+  $("fBranch").value = ""; $("fDuty").value = ""; page = 1; fillFilters(); renderTable();
+});
+$("fDivision").addEventListener("change", () => {
+  $("fDistrict").value = ""; $("fBranch").value = ""; $("fDuty").value = ""; page = 1; fillFilters(); renderTable();
+});
 $("fProvince").addEventListener("change", () => {
-  $("fDivision").value = ""; $("fDistrict").value = ""; page = 1; fillFilters(); renderTable();
+  $("fDivision").value = ""; $("fDistrict").value = ""; $("fBranch").value = ""; $("fDuty").value = "";
+  page = 1; fillFilters(); renderTable();
 });
 
 function fillEntryUsers() {
@@ -401,17 +726,33 @@ function fillEntryUsers() {
 }
 $("entryUser").addEventListener("change", () => { page = 1; refreshAll(); });
 
+$("refreshBtn").addEventListener("click", async () => {
+  if (!me) return;
+  const button = $("refreshBtn");
+  setButtonBusy(button, true, "تازہ ہو رہا ہے...");
+  try {
+    await loadRecords(me, true);
+  } catch (error) {
+    reportError("تازہ ڈیٹا لوڈ نہیں ہو سکا", error);
+  } finally {
+    setButtonBusy(button, false);
+  }
+});
+
 $("exportBtn").addEventListener("click", () => {
   const ownerId = entryOwnerId();
+  const exportCols = me.role === "admin"
+    ? COLS
+    : COLS.filter(col => ![K.offMin, K.grade, K.ijaraMin].includes(col));
   const rows = filteredRows().map(row => {
     const entry = entryFor(row, ownerId) || {};
     const output = {};
-    COLS.forEach(col => output[col] = col === K.hifz || col === K.nazra ? entry[col] || "" : row[col] ?? "");
+    exportCols.forEach(col => output[col] = col === K.hifz || col === K.nazra ? entry[col] || "" : row[col] ?? "");
     output[EXTRA_COLS[0]] = entry.updatedBy || "";
     output[EXTRA_COLS[1]] = entry.updatedAt || "";
     return output;
   });
-  const sheet = XLSX.utils.json_to_sheet(rows, { header: COLS.concat(EXTRA_COLS) });
+  const sheet = XLSX.utils.json_to_sheet(rows, { header: exportCols.concat(EXTRA_COLS) });
   const book = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(book, sheet, "مدرسین");
   XLSX.writeFile(book, `teachers_${me.username}.xlsx`);
@@ -427,8 +768,12 @@ $("templateBtn").addEventListener("click", () => {
 });
 
 function normalizeRecord(input) {
+  const byNfcKey = {};
+  for (const [key, val] of Object.entries(input || {})) {
+    byNfcKey[nfc(key).trim()] = val;
+  }
   const row = {};
-  COLS.forEach(col => row[col] = clean(input[col]));
+  COLS.forEach(col => row[col] = clean(byNfcKey[nfc(col)]));
   if (!row[K.code] || !row[K.province]) return null;
   row[K.hifz] = "";
   row[K.nazra] = "";
@@ -437,6 +782,14 @@ function normalizeRecord(input) {
 
 function userCanSeeRegion(user, row) {
   return user.role === "admin" || hasRegion(user, row);
+}
+
+function buildRecordPayload(row, updatedAt, updatedAtMs) {
+  const assignedTo = USERS.filter(user => user.active && userCanSeeRegion(user, row)).map(user => user.id);
+  return {
+    data: row, province: row[K.province], division: row[K.division], district: row[K.district],
+    assignedTo, sourceKey: `${row[K.code]}|${row[K.province]}`, updatedAt, updatedAtMs
+  };
 }
 
 async function uploadRecords(inputRows, sourceName) {
@@ -450,17 +803,19 @@ async function uploadRecords(inputRows, sourceName) {
     normalized.set(recordId(row), row);
   });
   const entries = [...normalized.entries()];
+  const updatedAt = nowStr(), updatedAtMs = Date.now();
   for (let offset = 0; offset < entries.length; offset += 400) {
     const batch = writeBatch(db);
     entries.slice(offset, offset + 400).forEach(([id, row]) => {
-      const assignedTo = USERS.filter(user => userCanSeeRegion(user, row)).map(user => user.id);
-      batch.set(doc(db, "records", id), {
-        data: row, province: row[K.province], division: row[K.division], district: row[K.district],
-        assignedTo, sourceKey: `${row[K.code]}|${row[K.province]}`, updatedAt: nowStr()
-      }, { merge: true });
+      const payload = buildRecordPayload(row, updatedAt, updatedAtMs);
+      batch.set(doc(db, "records", id), payload, { merge: true });
+      const prev = RECORD_DOCS.get(id) || {};
+      RECORD_DOCS.set(id, { ...prev, id, ...payload });
     });
     await batch.commit();
   }
+  localStorage.setItem(syncStorageKey(me.id), String(Math.max(0, Date.now() - 10000)));
+  applyRecordDocs();
   await saveLog("امپورٹ", `${sourceName}: ${entries.length} ریکارڈ، رد ${skipped}`);
   alert(`امپورٹ مکمل\nریکارڈ: ${entries.length}\nرد (کوڈ یا صوبہ خالی): ${skipped}`);
 }
@@ -476,15 +831,17 @@ $("importFile").addEventListener("change", event => {
   const reader = new FileReader();
   reader.onload = async loadEvent => {
     try {
-      let rows;
-      if (/\.json$/i.test(file.name)) {
-        rows = JSON.parse(new TextDecoder("utf-8").decode(loadEvent.target.result));
-        if (!Array.isArray(rows)) throw new Error("JSON فائل ریکارڈز کی فہرست ہونی چاہیے");
-      } else {
-        const workbook = XLSX.read(loadEvent.target.result, { type: "array" });
-        rows = XLSX.utils.sheet_to_json(workbook.Sheets[workbook.SheetNames[0]], { defval: "", raw: false });
-      }
-      await uploadRecords(rows, file.name);
+      await withLoader("فائل امپورٹ ہو رہی ہے...", async () => {
+        let rows;
+        if (/\.json$/i.test(file.name)) {
+          rows = JSON.parse(new TextDecoder("utf-8").decode(loadEvent.target.result));
+          if (!Array.isArray(rows)) throw new Error("JSON فائل ریکارڈز کی فہرست ہونی چاہیے");
+        } else {
+          const workbook = XLSX.read(loadEvent.target.result, { type: "array" });
+          rows = XLSX.utils.sheet_to_json(workbook.Sheets[workbook.SheetNames[0]], { defval: "", raw: false });
+        }
+        await uploadRecords(rows, file.name);
+      });
     } catch (error) {
       reportError("فائل امپورٹ نہیں ہو سکی", error);
     }
@@ -564,15 +921,26 @@ const requireAdmin = () => {
 };
 
 function provinceDivisions(province) {
-  return [...new Set(DATA.filter(row => row[K.province] === province).map(row => row[K.division]).filter(Boolean))].sort();
+  const normProv = nfc(province);
+  return [...new Set(
+    DATA.filter(row => nfc(row[K.province]) === normProv)
+      .map(row => row[K.division])
+      .filter(Boolean)
+  )].sort();
 }
 
 function renderScopeChecks(selected = []) {
-  const assignments = new Map(selected.map(item => [item.province, item.divisions || []]));
-  $("uScopeSelections").innerHTML = provinces.map(province => {
+  if (!DATA.length && recordsLoading) {
+    pendingScopeSelection = selected;
+    $("uScopeSelections").innerHTML = '<span class="note">ڈیٹا ریکارڈز لوڈ ہو رہے ہیں، براہِ کرم انتظار کریں...</span>';
+    return;
+  }
+  const assignments = new Map(selected.map(item => [nfc(item.province), (item.divisions || []).map(nfc)]));
+  const scopeProvinces = [...new Set([...provinces, ...assignments.keys()])].filter(Boolean).sort();
+  $("uScopeSelections").innerHTML = scopeProvinces.map(province => {
     const selectedDivisions = assignments.get(province);
     const provinceChecked = assignments.has(province);
-    const divisions = provinceDivisions(province);
+    const divisions = [...new Set([...provinceDivisions(province), ...(selectedDivisions || [])])].filter(Boolean).sort();
     return `<div class="scope-province">
       <label class="inline"><input type="checkbox" class="province-check" value="${esc(province)}" ${provinceChecked ? "checked" : ""}> ${esc(province)}
         <small>(کوئی ڈویژن منتخب نہ ہو تو پورا صوبہ)</small></label>
@@ -594,13 +962,42 @@ function collectAssignments() {
 }
 
 function fillScopeChecks() {
-  if ($("userDlg").open && !editingId) renderScopeChecks(collectAssignments());
+  if (!$("userDlg").open) return;
+  const selected = pendingScopeSelection ?? collectAssignments();
+  pendingScopeSelection = null;
+  renderScopeChecks(selected);
+}
+
+function fillUserProvinceFilter() {
+  if (!me || me.role !== "admin" || !$("uFilterProvince")) return;
+  const userProvs = USERS.flatMap(u => assignmentsForUser(u).map(a => nfc(a.province)).filter(Boolean));
+  const list = [...new Set([...provinces, ...userProvs])].sort();
+  fillFilter($("uFilterProvince"), "تمام صوبے", list);
 }
 
 function renderUsers() {
   if (!requireAdmin()) return;
+  fillUserProvinceFilter();
+  const search = ($("uSearch")?.value || "").trim().toLowerCase();
+  const roleFilter = $("uFilterRole")?.value || "";
+  const provFilter = $("uFilterProvince")?.value || "";
+  const statusFilter = $("uFilterStatus")?.value || "";
+
+  const filtered = USERS.filter(user => {
+    if (roleFilter && user.role !== roleFilter) return false;
+    if (statusFilter === "active" && !user.active) return false;
+    if (statusFilter === "inactive" && user.active) return false;
+    const userAssigns = assignmentsForUser(user);
+    if (provFilter && !userAssigns.some(a => nfc(a.province) === provFilter)) return false;
+    if (search) {
+      const scopeText = userAssigns.map(a => `${a.province} ${(a.divisions || []).join(" ")}`).join(" ").toLowerCase();
+      if (!user.username.toLowerCase().includes(search) && !scopeText.includes(search)) return false;
+    }
+    return true;
+  });
+
   $("userTable").innerHTML = `<thead><tr><th>یوزر آئی ڈی</th><th>کردار</th><th>اسائن شدہ صوبے/ڈویژن</th><th>حالت</th><th></th></tr></thead><tbody>` +
-    USERS.map(user => {
+    (filtered.map(user => {
       const scope = user.role === "admin" ? "تمام ڈیٹا" : assignmentsForUser(user)
         .map(item => `${item.province}${item.divisions?.length ? ` — ${item.divisions.join("، ")}` : " — پورا صوبہ"}`).join("<br>");
       return `<tr><td>${esc(user.username)}</td><td>${user.role === "admin" ? "ایڈمن" : "یوزر"}</td>
@@ -608,18 +1005,24 @@ function renderUsers() {
         <td><span class="tag ${user.active ? "" : "off"}">${user.active ? "فعال" : "بند"}</span></td>
         <td><button class="link" data-act="edit" data-id="${esc(user.id)}">ترمیم</button>
         ${user.id === me.id ? "" : `<button class="link del" data-act="del" data-id="${esc(user.id)}">حذف</button>`}</td></tr>`;
-    }).join("") + "</tbody>";
+    }).join("") || `<tr><td colspan="5" class="center">کوئی یوزر نہیں ملا</td></tr>`) + "</tbody>";
   fillEntryUsers();
 }
+
+["uSearch", "uFilterRole", "uFilterProvince", "uFilterStatus"].forEach(id => {
+  $(id)?.addEventListener(id === "uSearch" ? "input" : "change", () => renderUsers());
+});
 
 function openUserDlg(user = null) {
   if (!requireAdmin()) return;
   editingId = user?.id || null;
   $("userDlgTitle").textContent = user ? "یوزر میں ترمیم" : "نیا یوزر";
   $("uName").value = user?.username || "";
+  $("uName").disabled = !!user;
   $("uPass").value = "";
   $("uPass").required = !user;
-  $("uPassLabel").firstChild.textContent = user ? "نیا پاس ورڈ (خالی چھوڑیں تو وہی رہے گا)" : "پاس ورڈ";
+  $("uPass").disabled = !!user;
+  $("uPassLabel").classList.toggle("hidden", !!user);
   $("uRole").value = user?.role || "user";
   $("uActive").checked = user ? !!user.active : true;
   $("userErr").textContent = "";
@@ -632,8 +1035,46 @@ function toggleScope() {
   $("scopeBox").classList.toggle("hidden", $("uRole").value === "admin");
 }
 
+function otherActiveAdmins(exceptUid) {
+  return USERS.filter(u => u.id !== exceptUid && u.role === "admin" && u.active).length;
+}
+
+async function syncRecordAssignmentsClient(uid, targetUser) {
+  if (!RECORD_DOCS.size) await loadRecords(me, false);
+  const updates = [];
+  for (const [id, raw] of RECORD_DOCS.entries()) {
+    const row = rowFromDocData(id, raw);
+    const hasUid = Array.isArray(raw.assignedTo) && raw.assignedTo.includes(uid);
+    const shouldHave = !!(targetUser && targetUser.active && userCanSeeRegion(targetUser, row));
+    if (hasUid !== shouldHave) {
+      updates.push({ id, raw, add: shouldHave });
+    }
+  }
+  const nowMs = Date.now();
+  for (let offset = 0; offset < updates.length; offset += 400) {
+    const batch = writeBatch(db);
+    updates.slice(offset, offset + 400).forEach(item => {
+      batch.update(doc(db, "records", item.id), {
+        assignedTo: item.add ? arrayUnion(uid) : arrayRemove(uid),
+        updatedAtMs: nowMs
+      });
+      const prev = Array.isArray(item.raw.assignedTo) ? item.raw.assignedTo : [];
+      item.raw.assignedTo = item.add
+        ? [...new Set([...prev, uid])]
+        : prev.filter(x => x !== uid);
+      item.raw.updatedAtMs = nowMs;
+    });
+    await batch.commit();
+  }
+  if (updates.length) {
+    localStorage.setItem(syncStorageKey(me.id), String(Math.max(0, Date.now() - 10000)));
+    applyRecordDocs();
+  }
+}
+
 $("addUserBtn").addEventListener("click", () => openUserDlg());
-$("userCancel").addEventListener("click", () => $("userDlg").close());
+$("userCancel").addEventListener("click", () => { pendingScopeSelection = null; $("userDlg").close(); });
+$("userDlg").addEventListener("close", () => { pendingScopeSelection = null; });
 $("uRole").addEventListener("change", toggleScope);
 $("uScopeSelections").addEventListener("change", event => {
   const input = event.target;
@@ -641,52 +1082,98 @@ $("uScopeSelections").addEventListener("change", event => {
     const province = [...$("uScopeSelections").querySelectorAll(".province-check")]
       .find(check => check.value === input.dataset.province);
     if (province) province.checked = true;
+  } else if (input.classList.contains("province-check") && !input.checked) {
+    [...$("uScopeSelections").querySelectorAll(".division-check")]
+      .filter(check => check.dataset.province === input.value)
+      .forEach(check => { check.checked = false; });
   }
 });
 
 $("userForm").addEventListener("submit", async event => {
   event.preventDefault();
   if (!requireAdmin()) return;
-  const username = $("uName").value.trim();
+  const oldUser = editingId ? USERS.find(u => u.id === editingId) : null;
+  const username = oldUser ? oldUser.username : $("uName").value.trim();
   const password = $("uPass").value;
-  const role = $("uRole").value;
+  const role = normalizeRole($("uRole").value);
+  const active = $("uActive").checked;
   const assignments = role === "admin" ? [] : collectAssignments();
   const error = message => { $("userErr").textContent = message; };
-  let problem = nameProblem(username);
-  if (problem) { error(problem); return; }
-  if (!editingId || password) {
+
+  if (!editingId) {
+    let problem = nameProblem(username);
+    if (problem) { error(problem); return; }
     problem = pwProblem(password, username);
     if (problem) { error(problem); return; }
+    if (USERS.some(user => user.username.toLowerCase() === username.toLowerCase())) {
+      error("یہ یوزر نیم پہلے سے موجود ہے");
+      return;
+    }
+  } else {
+    if (!oldUser) { error("یوزر نہیں ملا"); return; }
+    if (editingId === me.id && (role !== "admin" || !active)) {
+      error("اپنا ایڈمن اکاؤنٹ بند یا کم درجہ نہیں کر سکتے۔");
+      return;
+    }
+    if (oldUser.role === "admin" && oldUser.active && (role !== "admin" || !active) && otherActiveAdmins(editingId) < 1) {
+      error("کم از کم ایک فعال ایڈمن لازمی ہے۔");
+      return;
+    }
   }
-  if (USERS.some(user => user.id !== editingId && user.username.toLowerCase() === username.toLowerCase())) {
-    error("یہ یوزر نیم پہلے سے موجود ہے");
-    return;
-  }
+  if (!role) { error("کردار درست نہیں"); return; }
   if (role === "user" && !assignments.length) {
     error("یوزر کو کم از کم ایک صوبہ اسائن کریں");
     return;
   }
+
   const submit = $("userForm").querySelector('button[type="submit"]');
-  submit.disabled = true;
+  setButtonBusy(submit, true, "محفوظ ہو رہا ہے...");
   try {
-    const result = await manageUser({
-      action: editingId ? "update" : "create",
-      uid: editingId,
-      username,
-      password: password || undefined,
-      role,
-      active: $("uActive").checked,
-      assignments
-    });
-    const user = result.data;
-    if (user.id === me.id) me = { ...me, ...user };
+    if (!editingId) {
+      const cAuth = getCreatorAuth();
+      const cred = await createUserWithEmailAndPassword(cAuth, userEmail(username), password);
+      const uid = cred.user.uid;
+      const profile = {
+        username,
+        usernameKey: username.toLowerCase(),
+        role,
+        active,
+        assignments,
+        createdAt: new Date().toISOString()
+      };
+      try {
+        await setDoc(doc(db, "users", uid), profile);
+      } catch (writeErr) {
+        try { await cred.user.delete(); } catch {}
+        throw writeErr;
+      } finally {
+        try { await signOut(cAuth); } catch {}
+      }
+      await syncRecordAssignmentsClient(uid, profile);
+    } else {
+      const nextProfile = {
+        username: oldUser.username,
+        usernameKey: (oldUser.usernameKey || oldUser.username).toLowerCase(),
+        role,
+        active,
+        assignments,
+        createdAt: oldUser.createdAt || new Date().toISOString()
+      };
+      await setDoc(doc(db, "users", editingId), nextProfile);
+      await syncRecordAssignmentsClient(editingId, nextProfile);
+      if (editingId === me.id) me = { ...me, ...nextProfile };
+    }
     await saveLog(editingId ? "یوزر ترمیم" : "نیا یوزر", `${username} — ${role}`);
     $("userDlg").close();
     renderUsers();
   } catch (err) {
-    error(err.message || "یوزر محفوظ نہیں ہو سکا");
+    if (err?.code === "auth/email-already-in-use") {
+      error("یہ یوزر آئی ڈی پہلے سے Auth میں موجود ہے؛ دوسرا نام رکھیں یا admin_cli.mjs سے شامل کریں۔");
+    } else {
+      error(err.message || "یوزر محفوظ نہیں ہو سکا");
+    }
   } finally {
-    submit.disabled = false;
+    setButtonBusy(submit, false);
   }
 });
 
@@ -696,11 +1183,18 @@ $("userTable").addEventListener("click", async event => {
   const user = USERS.find(item => item.id === button.dataset.id);
   if (!user) return;
   if (button.dataset.act === "edit") openUserDlg(user);
-  if (button.dataset.act === "del" && user.id !== me.id &&
-      confirm(`یوزر "${user.username}" اور اس کا لاگ اِن حذف کریں؟`)) {
+  if (button.dataset.act === "del" && user.id !== me.id) {
+    if (user.role === "admin" && user.active && otherActiveAdmins(user.id) < 1) {
+      alert("کم از کم ایک فعال ایڈمن لازمی ہے۔");
+      return;
+    }
+    if (!confirm(`یوزر "${user.username}" کا رسائی ریکارڈ حذف کریں؟`)) return;
     try {
-      await manageUser({ action: "delete", uid: user.id });
-      await saveLog("یوزر حذف", user.username);
+      await withLoader("یوزر حذف ہو رہا ہے...", async () => {
+        await syncRecordAssignmentsClient(user.id, null);
+        await deleteDoc(doc(db, "users", user.id));
+        await saveLog("یوزر حذف", user.username);
+      });
     } catch (error) {
       reportError("یوزر حذف نہیں ہو سکا", error);
     }
@@ -733,47 +1227,59 @@ $("adminForm").addEventListener("submit", async event => {
     message("یہ یوزر نیم پہلے سے موجود ہے", false);
     return;
   }
-  if (newPassword || repeatPassword) {
-    if (newPassword !== repeatPassword) { message("نئے پاس ورڈ ایک جیسے نہیں", false); return; }
-    problem = pwProblem(newPassword, newUsername);
-    if (problem) { message(problem, false); return; }
+  if (newUsername !== me.username) {
+    message("یوزر آئی ڈی بدلنے کے لیے admin_cli.mjs استعمال کریں؛ پاس ورڈ یہیں سے تبدیل ہو سکتا ہے۔", false);
+    return;
   }
+  if (!newPassword && !repeatPassword) {
+    message("نیا پاس ورڈ درج کریں", false);
+    return;
+  }
+  if (newPassword !== repeatPassword) { message("نئے پاس ورڈ ایک جیسے نہیں", false); return; }
+  problem = pwProblem(newPassword, me.username);
+  if (problem) { message(problem, false); return; }
+  const submit = $("adminForm").querySelector('button[type="submit"]');
+  setButtonBusy(submit, true, "محفوظ ہو رہا ہے...");
   try {
-    const credential = EmailAuthProvider.credential(userEmail(me.username), currentPassword);
-    await reauthenticateWithCredential(auth.currentUser, credential);
-    if (newPassword) await updatePassword(auth.currentUser, newPassword);
-    if (newUsername !== me.username) {
-      const result = await manageSelf({ username: newUsername });
-      me = { ...me, ...result.data };
-      $("whoLabel").textContent = `${me.username} (ایڈمن)`;
-    }
-    $("aCur").value = $("aNew").value = $("aNew2").value = "";
-    message("محفوظ ہو گیا", true);
-    await saveLog("ایڈمن نام/پاس ورڈ تبدیل");
+    await withLoader("پاس ورڈ تبدیل ہو رہا ہے...", async () => {
+      const credential = EmailAuthProvider.credential(userEmail(me.username), currentPassword);
+      await reauthenticateWithCredential(auth.currentUser, credential);
+      await updatePassword(auth.currentUser, newPassword);
+      $("aCur").value = $("aNew").value = $("aNew2").value = "";
+      message("پاس ورڈ تبدیل ہو گیا", true);
+      await saveLog("ایڈمن پاس ورڈ تبدیل");
+    });
   } catch (error) {
     message(error.code === "auth/wrong-password" ? "موجودہ پاس ورڈ غلط ہے" : error.message, false);
+  } finally {
+    setButtonBusy(submit, false);
   }
 });
 
 $("backupBtn").addEventListener("click", async () => {
   if (!requireAdmin()) return;
+  const button = $("backupBtn");
+  setButtonBusy(button, true, "بیک اپ بن رہا ہے...");
   try {
-    const [records, entries] = await Promise.all([
-      getDocs(collection(db, "records")), getDocs(collection(db, "entries"))
-    ]);
-    const backup = {
-      version: 2, records: records.docs.map(d => ({ id: d.id, ...d.data() })),
-      entries: entries.docs.map(d => ({ id: d.id, ...d.data() }))
-    };
-    const blob = new Blob([JSON.stringify(backup)], { type: "application/json" });
-    const link = document.createElement("a");
-    link.href = URL.createObjectURL(blob);
-    link.download = `backup_${new Date().toISOString().slice(0, 10)}.json`;
-    link.click();
-    setTimeout(() => URL.revokeObjectURL(link.href), 2000);
-    await saveLog("بیک اپ ڈاؤن لوڈ");
+    await withLoader("بیک اپ تیار ہو رہا ہے...", async () => {
+      await loadRecords(me, false);
+      const records = [...RECORD_DOCS.values()];
+      const entries = entriesLoaded
+        ? ENTRIES.map(entry => ({ ...entry }))
+        : (await getDocs(collection(db, "entries"))).docs.map(d => ({ id: d.id, ...d.data() }));
+      const backup = { version: 2, records, entries };
+      const blob = new Blob([JSON.stringify(backup)], { type: "application/json" });
+      const link = document.createElement("a");
+      link.href = URL.createObjectURL(blob);
+      link.download = `backup_${new Date().toISOString().slice(0, 10)}.json`;
+      link.click();
+      setTimeout(() => URL.revokeObjectURL(link.href), 2000);
+      await saveLog("بیک اپ ڈاؤن لوڈ");
+    });
   } catch (error) {
     reportError("بیک اپ نہیں بن سکا", error);
+  } finally {
+    setButtonBusy(button, false);
   }
 });
 
@@ -788,31 +1294,32 @@ $("restoreFile").addEventListener("change", event => {
       const backup = JSON.parse(loadEvent.target.result);
       if (!Array.isArray(backup.records) || !Array.isArray(backup.entries)) throw new Error("بیک اپ فائل درست نہیں");
       if (!confirm(`ریکارڈ: ${backup.records.length}، انٹریاں: ${backup.entries.length}\nموجودہ ریکارڈز میں شامل کریں؟`)) return;
-      for (let offset = 0; offset < backup.records.length; offset += 400) {
-        const batch = writeBatch(db);
-        backup.records.slice(offset, offset + 400).forEach(item => {
-          if (!item.id || !item.data) throw new Error("بیک اپ میں ریکارڈ کا فارمیٹ درست نہیں");
-          const row = normalizeRecord(item.data);
-          if (!row) throw new Error("بیک اپ میں ریکارڈ کا صوبہ یا کوڈ موجود نہیں");
-          const province = row[K.province];
-          const assignedTo = USERS.filter(user => userCanSeeRegion(user, row)).map(user => user.id);
-          batch.set(doc(db, "records", item.id), {
-            data: row, province, division: row[K.division],
-            district: row[K.district], assignedTo,
-            sourceKey: `${row[K.code]}|${province}`, updatedAt: nowStr()
+      await withLoader("بیک اپ بحال ہو رہا ہے...", async () => {
+        const updatedAt = nowStr(), updatedAtMs = Date.now();
+        for (let offset = 0; offset < backup.records.length; offset += 400) {
+          const batch = writeBatch(db);
+          backup.records.slice(offset, offset + 400).forEach(item => {
+            if (!item.id || !item.data) throw new Error("بیک اپ میں ریکارڈ کا فارمیٹ درست نہیں");
+            const row = normalizeRecord(item.data);
+            if (!row) throw new Error("بیک اپ میں ریکارڈ کا صوبہ یا کوڈ موجود نہیں");
+            const payload = buildRecordPayload(row, updatedAt, updatedAtMs);
+            batch.set(doc(db, "records", item.id), payload);
+            RECORD_DOCS.set(item.id, { id: item.id, ...payload });
           });
-        });
-        await batch.commit();
-      }
-      for (let offset = 0; offset < backup.entries.length; offset += 400) {
-        const batch = writeBatch(db);
-        backup.entries.slice(offset, offset + 400).forEach(item => {
-          if (!item.id || !item.recordId || !item.userId) throw new Error("بیک اپ میں انٹری کا فارمیٹ درست نہیں");
-          batch.set(doc(db, "entries", item.id), item);
-        });
-        await batch.commit();
-      }
-      await saveLog("بیک اپ بحال");
+          await batch.commit();
+        }
+        localStorage.setItem(syncStorageKey(me.id), String(Math.max(0, Date.now() - 10000)));
+        applyRecordDocs();
+        for (let offset = 0; offset < backup.entries.length; offset += 400) {
+          const batch = writeBatch(db);
+          backup.entries.slice(offset, offset + 400).forEach(item => {
+            if (!item.id || !item.recordId || !item.userId) throw new Error("بیک اپ میں انٹری کا فارمیٹ درست نہیں");
+            batch.set(doc(db, "entries", item.id), item);
+          });
+          await batch.commit();
+        }
+        await saveLog("بیک اپ بحال");
+      });
       alert("بحالی مکمل ہو گئی");
     } catch (error) {
       reportError("بیک اپ بحال نہیں ہوا", error);

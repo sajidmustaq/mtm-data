@@ -20,7 +20,24 @@ service cloud.firestore {
     match /users/{userId} {
       allow get: if activeUser() && (request.auth.uid == userId || isAdmin());
       allow list: if isAdmin();
-      allow create, update, delete: if false;
+      allow create: if isAdmin() &&
+        request.resource.data.keys().hasAll(["username", "usernameKey", "role", "active", "assignments"]) &&
+        request.resource.data.keys().hasOnly(["username", "usernameKey", "role", "active", "assignments", "createdAt"]) &&
+        request.resource.data.username is string &&
+        request.resource.data.usernameKey is string &&
+        request.resource.data.role in ["admin", "user"] &&
+        request.resource.data.active is bool &&
+        request.resource.data.assignments is list;
+      allow update: if isAdmin() &&
+        request.resource.data.keys().hasAll(["username", "usernameKey", "role", "active", "assignments"]) &&
+        request.resource.data.keys().hasOnly(["username", "usernameKey", "role", "active", "assignments", "createdAt"]) &&
+        request.resource.data.username is string &&
+        request.resource.data.usernameKey is string &&
+        request.resource.data.role in ["admin", "user"] &&
+        request.resource.data.active is bool &&
+        request.resource.data.assignments is list &&
+        (request.auth.uid != userId || (request.resource.data.role == "admin" && request.resource.data.active == true));
+      allow delete: if isAdmin() && request.auth.uid != userId;
     }
 
     match /records/{recordId} {
@@ -36,9 +53,16 @@ service cloud.firestore {
           request.resource.data.recordId is string &&
           request.resource.data.keys().hasOnly([
             "recordId", "userId", "کیا یہ مدرس حقیتا حفظ کا درجہ بڑھا رہے ہیں",
-            "کیا یہ حقیقتا ناظرہ کا درجہ  پڑھا رہےہیں", "updatedBy", "updatedAt"
+            "کیا یہ حقیقتا ناظرہ کا درجہ  پڑھا رہےہیں", "updatedBy", "updatedAt",
+            "submitted", "submittedAt"
           ]) &&
-          request.resource.data.keys().hasAll(["recordId", "userId"]) &&
+          request.resource.data.keys().hasAll([
+            "recordId", "userId", "کیا یہ مدرس حقیتا حفظ کا درجہ بڑھا رہے ہیں",
+            "کیا یہ حقیقتا ناظرہ کا درجہ  پڑھا رہےہیں", "submitted"
+          ]) &&
+          request.resource.data["کیا یہ مدرس حقیتا حفظ کا درجہ بڑھا رہے ہیں"] in ["جی ہاں", "جی نہیں"] &&
+          request.resource.data["کیا یہ حقیقتا ناظرہ کا درجہ  پڑھا رہےہیں"] in ["جی ہاں", "جی نہیں"] &&
+          request.resource.data.submitted == true &&
           exists(/databases/$(database)/documents/records/$(request.resource.data.recordId)) &&
           request.auth.uid in get(
             /databases/$(database)/documents/records/$(request.resource.data.recordId)
@@ -47,7 +71,13 @@ service cloud.firestore {
 
       allow read: if isAdmin() ||
         (activeUser() && resource.data.userId == request.auth.uid);
-      allow create, update: if isAdmin() || canWriteOwnEntry();
+      allow create: if isAdmin() || canWriteOwnEntry();
+      allow update: if isAdmin() || (
+        canWriteOwnEntry() &&
+        resource.data.get("submitted", false) != true &&
+        resource.data.get("کیا یہ مدرس حقیتا حفظ کا درجہ بڑھا رہے ہیں", "") == "" &&
+        resource.data.get("کیا یہ حقیقتا ناظرہ کا درجہ  پڑھا رہےہیں", "") == ""
+      );
       allow delete: if isAdmin();
     }
 
