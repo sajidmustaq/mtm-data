@@ -53,10 +53,9 @@ h2 { color: var(--main); font-size: 18px; margin: 22px 0 10px; }
 .toolbar { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-bottom: 12px; }
 .toolbar .spacer { flex: 1; }
 input[type=text], input[type=password], select {
-  font: inherit; padding: 7px 10px; border: 1px solid var(--line); background: #fff; min-width: 140px;
+  font: inherit; padding: 7px 10px; border: 1px solid var(--line); background: #fff; min-width: 140px; border-radius: 4px;
 }
 input:focus, select:focus { outline: 2px solid var(--main); outline-offset: -1px; }
-#fSearch { min-width: 240px; }
 
 .btn, .btn-light {
   font: inherit; padding: 7px 16px; cursor: pointer; border: 1px solid var(--main);
@@ -103,7 +102,7 @@ input:focus, select:focus { outline: 2px solid var(--main); outline-offset: -1px
   height: 34px;
   min-width: 0;
 }
-.filter-bar #fSearch { flex: 1 1 170px; min-width: 140px; }
+.filter-bar #fSearch { flex: 0 1 165px; width: 165px; min-width: 120px; }
 .filter-bar .entry-owner { font-size: 14px; white-space: nowrap; flex-shrink: 0; }
 .filter-bar .entry-owner select { min-width: 105px; max-width: 145px; }
 .filter-bar #fStatus { width: auto; flex-shrink: 0; }
@@ -172,16 +171,71 @@ input:focus, select:focus { outline: 2px solid var(--main); outline-offset: -1px
   .filter-bar { flex-wrap: wrap; }
 }
 
-/* ٹیبل */
-.table-wrap { overflow-x: auto; background: #fff; border: 1px solid var(--line); }
-table { border-collapse: collapse; width: 100%; }
-th, td { padding: 8px 10px; border-bottom: 1px solid var(--line); text-align: right; white-space: nowrap; }
-th { background: #eef3f0; color: var(--main-dark); position: sticky; top: 0; font-weight: 700; }
-tbody tr:hover { background: #fafbf9; }
+/* ٹیبل (ایکسل طرز) */
+.table-wrap {
+  overflow: auto;
+  max-height: calc(100vh - 230px);
+  background: #fff;
+  border: 1px solid #c3ccc5;
+  border-radius: 6px;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, .05);
+}
+table { border-collapse: separate; border-spacing: 0; width: 100%; font-size: 14.5px; }
+th, td {
+  padding: 6px 10px;
+  border-bottom: 1px solid #dde3dc;
+  border-left: 1px solid #e6ebe5;
+  text-align: right;
+  white-space: nowrap;
+}
+th:last-child, td:last-child { border-left: 0; }
+th {
+  background: linear-gradient(180deg, #ebf2ee 0%, #dce8e1 100%);
+  color: var(--main-dark);
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  font-weight: 700;
+  font-size: 13.5px;
+  padding: 8px 10px;
+  border-bottom: 2px solid #9ab6a7;
+  border-left-color: #c5d4cb;
+}
+#dataTable thead th:first-child { background: #d2e0d8; text-align: center; }
+#dataTable tbody td:first-child {
+  background: #f3f6f4;
+  color: #555;
+  text-align: center;
+  font-weight: 600;
+  min-width: 42px;
+  border-left: 1px solid #cdd7d0;
+}
+tbody tr:nth-child(even) td { background: #f9fbfa; }
+tbody tr:hover td { background: #eaf3ee !important; }
 tr.done td:first-child { border-right: 4px solid var(--main); }
 tr.pending td:first-child { border-right: 4px solid var(--warn); }
-td select { min-width: 100px; }
-td select.empty { border-color: var(--warn); }
+
+td select {
+  appearance: none;
+  -webkit-appearance: none;
+  min-width: 118px;
+  padding: 4px 10px 4px 26px;
+  font-size: 13.5px;
+  font-weight: 600;
+  border-radius: 6px;
+  border: 1px solid #c4cfc8;
+  background-color: #fff;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%23475569' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: left 8px center;
+  cursor: pointer;
+  transition: border-color .15s, background-color .15s, box-shadow .15s;
+}
+td select:hover:not(:disabled) { border-color: var(--main); box-shadow: 0 0 0 2px rgba(31, 95, 74, .1); }
+td select.empty { background-color: #fffbeb; border-color: #e2b04a; color: #7c4a03; }
+td select.val-yes { background-color: #ecfdf5; border-color: #2f9e6e; color: #14532d; }
+td select.val-no { background-color: #fef2f2; border-color: #e09f9f; color: #7f1d1d; }
+td select:disabled { opacity: .82; cursor: default; background-image: none; padding-left: 10px; }
 .center { text-align: center; padding: 24px; }
 
 .pager { display: flex; gap: 10px; align-items: center; justify-content: center; margin-top: 14px; }

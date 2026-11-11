@@ -9,7 +9,7 @@
 <link rel="icon" href="data:,">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Noto+Naskh+Arabic:wght@400;600;700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="style.css?v=20261111-v3">
+<link rel="stylesheet" href="style.css?v=20261111-v4">
 </head>
 <body>
 
@@ -59,12 +59,12 @@
       <div class="entry-top">
         <div class="summary" id="miniSummary"></div>
         <div class="entry-actions">
-          <button type="button" class="btn-light" id="clearFiltersBtn" title="تمام فلٹرز صاف کریں">فلٹر صاف</button>
+          <button type="button" class="btn-light" id="clearFiltersBtn" title="تمام فلٹرز صاف کریں">clear Filters</button>
           <button type="button" class="btn-light" id="refreshBtn" title="سرور سے تازہ ڈیٹا لوڈ کریں">تازہ کریں</button>
-          <button class="btn" id="exportBtn">ایکسل ایکسپورٹ</button>
-          <label class="btn admin-only" for="importFile">امپورٹ (ایکسل / JSON)</label>
+          <button class="btn" id="exportBtn">Export</button>
+          <label class="btn admin-only" for="importFile">Import (Excel / JSON)</label>
           <input type="file" id="importFile" accept=".xlsx,.xls,.csv,.json" hidden>
-          <button class="btn-light admin-only" id="templateBtn">خالی فارم</button>
+          <button class="btn-light admin-only" id="templateBtn">Empty Form</button>
         </div>
       </div>
 
@@ -75,7 +75,7 @@
         <div id="fDistrict" class="ms-wrap"></div>
         <div id="fBranch" class="ms-wrap"></div>
         <div id="fDuty" class="ms-wrap"></div>
-        <label class="admin-only entry-owner">انٹری دیکھیں <select id="entryUser"></select></label>
+        <label class="admin-only entry-owner">Entry viewer: <select id="entryUser"></select></label>
         <select id="fStatus">
           <option value="">حالت: تمام</option>
           <option value="pending">باقی</option>
@@ -220,6 +220,6 @@
 </div>
 
 <script src="xlsx.full.min.js"></script>
-<script type="module" src="app.js?v=20261111-v10"></script>
+<script type="module" src="app.js?v=20261111-v12"></script>
 </body>
 </html>

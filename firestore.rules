@@ -24,6 +24,8 @@ service cloud.firestore {
         request.resource.data.keys().hasAll(["username", "usernameKey", "role", "active", "assignments"]) &&
         request.resource.data.keys().hasOnly(["username", "usernameKey", "role", "active", "assignments", "createdAt"]) &&
         request.resource.data.username is string &&
+        request.resource.data.username.size() >= 3 &&
+        request.resource.data.username.size() <= 30 &&
         request.resource.data.usernameKey is string &&
         request.resource.data.role in ["admin", "user"] &&
         request.resource.data.active is bool &&
@@ -32,6 +34,8 @@ service cloud.firestore {
         request.resource.data.keys().hasAll(["username", "usernameKey", "role", "active", "assignments"]) &&
         request.resource.data.keys().hasOnly(["username", "usernameKey", "role", "active", "assignments", "createdAt"]) &&
         request.resource.data.username is string &&
+        request.resource.data.username.size() >= 3 &&
+        request.resource.data.username.size() <= 30 &&
         request.resource.data.usernameKey is string &&
         request.resource.data.role in ["admin", "user"] &&
         request.resource.data.active is bool &&
@@ -51,6 +55,7 @@ service cloud.firestore {
         return activeUser() &&
           request.resource.data.userId == request.auth.uid &&
           request.resource.data.recordId is string &&
+          entryId == request.resource.data.recordId + "__" + request.auth.uid &&
           request.resource.data.keys().hasOnly([
             "recordId", "userId", "کیا یہ مدرس حقیتا حفظ کا درجہ بڑھا رہے ہیں",
             "کیا یہ حقیقتا ناظرہ کا درجہ  پڑھا رہےہیں", "updatedBy", "updatedAt",
@@ -84,9 +89,14 @@ service cloud.firestore {
     match /logs/{logId} {
       allow read: if isAdmin();
       allow create: if activeUser() &&
+        request.resource.data.keys().hasOnly(["uid", "username", "action", "detail", "createdAt", "time"]) &&
+        request.resource.data.keys().hasAll(["uid", "username", "action"]) &&
         request.resource.data.uid == request.auth.uid &&
         request.resource.data.username is string &&
-        request.resource.data.action is string;
+        request.resource.data.username.size() <= 50 &&
+        request.resource.data.action is string &&
+        request.resource.data.action.size() <= 100 &&
+        (!("detail" in request.resource.data) || (request.resource.data.detail is string && request.resource.data.detail.size() <= 500));
       allow update, delete: if false;
     }
   }

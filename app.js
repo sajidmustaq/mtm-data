@@ -188,11 +188,13 @@ function rowFromDocData(id, raw) {
   for (const [key, val] of Object.entries(rawData)) {
     byNfcKey[nfc(key).trim()] = nfc(val);
   }
+  const isAdmin = me?.role === "admin";
   const normalized = {};
   COLS.forEach(col => {
+    if (!isAdmin && [K.offMin, K.grade, K.ijaraMin].includes(col)) return;
     if (byNfcKey[nfc(col)] !== undefined) normalized[col] = byNfcKey[nfc(col)];
   });
-  return { id, ...rawData, ...normalized, assignedTo: raw?.assignedTo || [] };
+  return { id, ...normalized, assignedTo: raw?.assignedTo || [] };
 }
 
 function applyRecordDocs() {
@@ -384,7 +386,10 @@ onAuthStateChanged(auth, async account => {
     saveLog("لاگ اِن").catch(error => reportError("لاگ اِن لاگ محفوظ نہیں ہوا", error));
   } catch (error) {
     await signOut(auth);
-    returnToLogin(`اکاؤنٹ کی معلومات نہیں مل سکیں: ${error.message}`);
+    const msg = error?.code === "permission-denied"
+      ? "یہ اکاؤنٹ غیر فعال یا حذف کر دیا گیا ہے۔"
+      : `اکاؤنٹ کی معلومات نہیں مل سکیں: ${error.message}`;
+    returnToLogin(msg);
   } finally {
     if (showOverlay) hideLoader();
   }
@@ -625,6 +630,8 @@ const opts = value => `<option value="">-- منتخب کریں --</option>` +
   `<option value="${YES}" ${value === YES ? "selected" : ""}>${YES}</option>` +
   `<option value="${NO}" ${value === NO ? "selected" : ""}>${NO}</option>`;
 
+const selClass = value => value === YES ? "val-yes" : value === NO ? "val-no" : "empty";
+
 function isEntryLocked(entry) {
   return !!(entry && (entry.submitted === true || (entry[K.hifz] && entry[K.nazra])));
 }
@@ -690,8 +697,8 @@ function renderTable() {
       <td>${esc(row[K.branch])}</td><td>${esc(row[K.duty])}</td><td>${esc(row[K.district])}</td>
       <td>${esc(row[K.division])}</td>${isAdmin ? `<td>${esc(row[K.province])}</td>` : ""}
       ${isAdmin ? `<td>${esc(row[K.offMin])}</td><td>${esc(row[K.grade])}</td><td>${esc(row[K.ijaraMin])}</td>` : ""}
-      <td><select ${editable ? "" : "disabled"} class="${entry[K.hifz] ? "" : "empty"}" data-id="${esc(row.id)}" data-f="hifz">${opts(entry[K.hifz])}</select></td>
-      <td><select ${editable ? "" : "disabled"} class="${entry[K.nazra] ? "" : "empty"}" data-id="${esc(row.id)}" data-f="nazra">${opts(entry[K.nazra])}</select></td>
+      <td><select ${editable ? "" : "disabled"} class="${selClass(entry[K.hifz])}" data-id="${esc(row.id)}" data-f="hifz">${opts(entry[K.hifz])}</select></td>
+      <td><select ${editable ? "" : "disabled"} class="${selClass(entry[K.nazra])}" data-id="${esc(row.id)}" data-f="nazra">${opts(entry[K.nazra])}</select></td>
       <td>${actionCell}</td>
     </tr>`;
   }).join("") || `<tr><td colspan="${isAdmin ? 15 : 11}" class="center">کوئی ریکارڈ نہیں ملا</td></tr>`;
@@ -752,11 +759,11 @@ $("dataTable").addEventListener("change", event => {
     const nazraSel = tr.querySelector('select[data-f="nazra"]');
     if (hifzSel) {
       hifzSel.value = draft[K.hifz];
-      hifzSel.classList.toggle("empty", !draft[K.hifz]);
+      hifzSel.className = selClass(draft[K.hifz]);
     }
     if (nazraSel) {
       nazraSel.value = draft[K.nazra];
-      nazraSel.classList.toggle("empty", !draft[K.nazra]);
+      nazraSel.className = selClass(draft[K.nazra]);
     }
   }
 });
@@ -1483,7 +1490,8 @@ $("restoreFile").addEventListener("change", event => {
           const batch = writeBatch(db);
           backup.entries.slice(offset, offset + 400).forEach(item => {
             if (!item.id || !item.recordId || !item.userId) throw new Error("بیک اپ میں انٹری کا فارمیٹ درست نہیں");
-            batch.set(doc(db, "entries", item.id), item);
+            const { id: _entryId, ...entryPayload } = item;
+            batch.set(doc(db, "entries", item.id), entryPayload);
           });
           await batch.commit();
         }
