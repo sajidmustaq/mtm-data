@@ -863,22 +863,28 @@ function fillFilters() {
   multiFilters.duty.setOptions(unique(K.duty));
 }
 
+function parseEnGbMs(str) {
+  const m = /^(\d{2})\/(\d{2})\/(\d{4}),?\s+(\d{2}):(\d{2}):(\d{2})/.exec(String(str || "").trim());
+  return m ? Date.UTC(+m[3], +m[2] - 1, +m[1], +m[4], +m[5], +m[6]) : 0;
+}
+
 function filteredRows() {
   const search = $("fSearch").value.trim().toLowerCase();
   const isAdmin = me?.role === "admin";
+  const ownerId = entryOwnerId();
   const selProvs = $("fProvince").classList.contains("hidden") ? new Set() : multiFilters.province.getSelected();
   const selDivs = multiFilters.division.getSelected();
   const selDists = multiFilters.district.getSelected();
   const selBranches = $("fBranch").classList.contains("hidden") ? new Set() : multiFilters.branch.getSelected();
   const selDuties = multiFilters.duty.getSelected();
   const status = $("fStatus").value;
-  return visibleRows().filter(row => {
+  const rows = visibleRows().filter(row => {
     if (selProvs.size && !selProvs.has(row[K.province])) return false;
     if (selDivs.size && !selDivs.has(row[K.division])) return false;
     if (selDists.size && !selDists.has(row[K.district])) return false;
     if (selBranches.size && !selBranches.has(row[K.branch])) return false;
     if (selDuties.size && !selDuties.has(row[K.duty])) return false;
-    const entry = entryFor(row);
+    const entry = entryFor(row, ownerId);
     if (status === "done" && !isDone(entry)) return false;
     if (status === "pending" && isDone(entry)) return false;
     const searchFields = isAdmin
@@ -887,6 +893,18 @@ function filteredRows() {
     if (search && !searchFields.some(v => String(v || "").toLowerCase().includes(search))) return false;
     return true;
   });
+  if (!isAdmin) {
+    rows.sort((a, b) => {
+      const ea = entryFor(a, ownerId);
+      const eb = entryFor(b, ownerId);
+      const la = isEntryLocked(ea) ? 1 : 0;
+      const lb = isEntryLocked(eb) ? 1 : 0;
+      if (la !== lb) return la - lb;
+      if (la) return parseEnGbMs(ea.submittedAt || ea.updatedAt) - parseEnGbMs(eb.submittedAt || eb.updatedAt);
+      return 0;
+    });
+  }
+  return rows;
 }
 
 const opts = value => `<option value="">-- منتخب کریں --</option>` +
