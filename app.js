@@ -1506,6 +1506,17 @@ function renderUsers() {
   $(id)?.addEventListener(id === "uSearch" ? "input" : "change", () => renderUsers());
 });
 
+function setUserPassVisible(visible) {
+  const input = $("uPass");
+  const toggle = $("uPassToggle");
+  if (!input || !toggle) return;
+  input.type = visible ? "text" : "password";
+  toggle.setAttribute("aria-pressed", visible ? "true" : "false");
+  toggle.setAttribute("aria-label", visible ? "Hide password" : "Show password");
+  toggle.querySelector(".eye-open")?.classList.toggle("hidden", visible);
+  toggle.querySelector(".eye-off")?.classList.toggle("hidden", !visible);
+}
+
 function openUserDlg(user = null) {
   if (!requireAdmin()) return;
   editingId = user?.id || null;
@@ -1513,6 +1524,7 @@ function openUserDlg(user = null) {
   $("uName").value = user?.username || "";
   $("uName").disabled = !!user;
   $("uPass").value = "";
+  setUserPassVisible(false);
   $("uPass").required = !user;
   $("uPass").disabled = false;
   $("uPass").placeholder = user ? "Leave blank to keep existing" : "Min 8 chars (letters + digits)";
@@ -1560,8 +1572,9 @@ async function syncRecordAssignmentsClient(uid, targetUser, runRpc = true) {
 }
 
 $("addUserBtn").addEventListener("click", () => openUserDlg());
+$("uPassToggle").addEventListener("click", () => setUserPassVisible($("uPass").type === "password"));
 $("userCancel").addEventListener("click", () => { pendingScopeSelection = null; $("userDlg").close(); });
-$("userDlg").addEventListener("close", () => { pendingScopeSelection = null; });
+$("userDlg").addEventListener("close", () => { pendingScopeSelection = null; $("uPass").value = ""; setUserPassVisible(false); });
 $("uRole").addEventListener("change", toggleScope);
 $("uScopeSelections").addEventListener("change", event => {
   const input = event.target;

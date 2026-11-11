@@ -21,6 +21,8 @@ body {
 .login-wrap { min-height: 100vh; display: flex; align-items: center; justify-content: center; }
 .login-box { background: #fff; width: 340px; padding: 28px; border: 1px solid var(--line); }
 .login-box h1 { margin: 0 0 18px; font-size: 22px; color: var(--main); text-align: center; }
+.login-brand { display: flex; align-items: center; justify-content: center; gap: 10px; }
+.brand-logo { display: block; border-radius: 7px; flex-shrink: 0; }
 .login-box label { display: block; margin: 12px 0 4px; }
 .login-box input { width: 100%; }
 .login-box .pw-show { margin: 10px 0 0; font-size: 14px; cursor: pointer; }
@@ -35,7 +37,8 @@ body {
   display: flex; justify-content: space-between; align-items: center;
   padding: 10px 20px;
 }
-.topbar .title { font-size: 20px; font-weight: 700; }
+.topbar .title { font-size: 20px; font-weight: 700; display: flex; align-items: center; gap: 10px; }
+.topbar .brand-logo { box-shadow: 0 0 0 1.5px rgba(255, 255, 255, .3); }
 .who { display: flex; gap: 12px; align-items: center; }
 
 .tabs { background: #fff; border-bottom: 1px solid var(--line); padding: 0 16px; display: flex; gap: 4px; overflow-x: auto; }
@@ -256,6 +259,27 @@ tfoot td { font-weight: 700; background: #f7f8f5; }
 .form-grid { display: grid; gap: 10px; max-width: 420px; }
 .form-grid label, dialog label { display: block; }
 .form-grid input, dialog input[type=text], dialog input[type=password], dialog select { width: 100%; margin-top: 4px; }
+.pw-field { position: relative; display: block; margin-top: 4px; }
+.pw-field input[type=text], .pw-field input[type=password] { margin-top: 0; padding-inline-end: 38px; }
+.pw-eye {
+  position: absolute;
+  inset-inline-end: 6px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: #64748b;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  border-radius: 4px;
+}
+.pw-eye:hover { color: var(--main); background: rgba(31, 95, 74, .08); }
+.pw-eye:focus-visible { outline: 2px solid var(--main); }
 dialog { border: 1px solid var(--line); padding: 22px; width: min(440px, 94vw); font-family: inherit; }
 dialog::backdrop { background: rgba(0,0,0,.35); }
 dialog h3 { margin: 0 0 12px; color: var(--main); }
