@@ -13,15 +13,15 @@
 </head>
 <body>
 
-<!-- لوڈنگ -->
+<!-- Loading -->
 <div id="bootView" class="login-wrap">
   <div class="login-box center loader-inline">
     <span class="spinner" aria-hidden="true"></span>
-    <span>لوڈ ہو رہا ہے...</span>
+    <span>Loading...</span>
   </div>
 </div>
 
-<!-- لاگ اِن -->
+<!-- Login -->
 <div id="loginView" class="login-wrap hidden">
   <form id="loginForm" class="login-box" autocomplete="off">
     <h1>MTM Data</h1>
@@ -35,7 +35,7 @@
   </form>
 </div>
 
-<!-- مین ایپ -->
+<!-- Main App -->
 <div id="appView" class="hidden">
   <header class="topbar">
     <div class="title">MTM Data</div>
@@ -46,21 +46,21 @@
   </header>
 
   <nav class="tabs" id="tabs">
-    <button data-tab="entry" class="active">ڈیٹا انٹری</button>
-    <button data-tab="report" class="admin-only">رپورٹ</button>
-    <button data-tab="users" class="admin-only">یوزرز</button>
-    <button data-tab="log" class="admin-only">سرگرمی لاگ</button>
-    <button data-tab="settings" class="admin-only">سیٹنگز</button>
+    <button data-tab="entry" class="active">Data Entry</button>
+    <button data-tab="report" class="admin-only">Reports</button>
+    <button data-tab="users" class="admin-only">Users</button>
+    <button data-tab="log" class="admin-only">Activity Log</button>
+    <button data-tab="settings" class="admin-only">Settings</button>
   </nav>
 
   <main>
-    <!-- ڈیٹا انٹری -->
+    <!-- Data Entry -->
     <section id="tab-entry">
       <div class="entry-top">
         <div class="summary" id="miniSummary"></div>
         <div class="entry-actions">
-          <button type="button" class="btn-light" id="clearFiltersBtn" title="تمام فلٹرز صاف کریں">clear Filters</button>
-          <button type="button" class="btn-light" id="refreshBtn" title="سرور سے تازہ ڈیٹا لوڈ کریں">تازہ کریں</button>
+          <button type="button" class="btn-light" id="clearFiltersBtn" title="Clear all filters">Clear Filters</button>
+          <button type="button" class="btn-light" id="refreshBtn" title="Load fresh data from server">Refresh</button>
           <button class="btn" id="exportBtn">Export</button>
           <label class="btn admin-only" for="importFile">Import (Excel / JSON)</label>
           <input type="file" id="importFile" accept=".xlsx,.xls,.csv,.json" hidden>
@@ -69,17 +69,17 @@
       </div>
 
       <div class="filter-bar">
-        <input type="text" id="fSearch" placeholder="نام، کوڈ، ولدیت یا شاخ سے تلاش">
+        <input type="text" id="fSearch" placeholder="Search name, code, father, branch">
         <div id="fProvince" class="ms-wrap"></div>
         <div id="fDivision" class="ms-wrap"></div>
         <div id="fDistrict" class="ms-wrap"></div>
         <div id="fBranch" class="ms-wrap"></div>
         <div id="fDuty" class="ms-wrap"></div>
-        <label class="admin-only entry-owner">Entry viewer: <select id="entryUser"></select></label>
+        <label class="admin-only entry-owner">Entry Viewer: <select id="entryUser"></select></label>
         <select id="fStatus">
-          <option value="">حالت: تمام</option>
-          <option value="pending">باقی</option>
-          <option value="done">مکمل</option>
+          <option value="">Status: All</option>
+          <option value="pending">Pending</option>
+          <option value="done">Completed</option>
         </select>
       </div>
 
@@ -88,20 +88,20 @@
           <thead>
             <tr>
               <th>#</th>
-              <th>عملہ کوڈ</th>
-              <th>نام</th>
-              <th>ولدیت</th>
-              <th>شاخ</th>
-              <th>ذمہ داری</th>
-              <th>ڈسٹرکٹ</th>
-              <th>ڈویژن</th>
-              <th class="admin-only">صوبہ</th>
-              <th class="admin-only">آفیشل منٹ</th>
-              <th class="admin-only">گریڈ</th>
-              <th class="admin-only">اجارے کے منٹ</th>
-            <th>حفظ کی تدریس؟</th>
-<th>ناظرہ کی تدریس؟</th>
-              <th>عمل</th>
+              <th>Staff Code</th>
+              <th>Name</th>
+              <th>Father Name</th>
+              <th>Branch</th>
+              <th>Duty</th>
+              <th>District</th>
+              <th>Division</th>
+              <th class="admin-only">Province</th>
+              <th class="admin-only">Official Min</th>
+              <th class="admin-only">Grade</th>
+              <th class="admin-only">Ijara Min</th>
+              <th>Teaching Hifz?</th>
+              <th>Teaching Nazra?</th>
+              <th>Action</th>
             </tr>
           </thead>
           <tbody></tbody>
@@ -110,112 +110,112 @@
       <div class="pager" id="pager"></div>
     </section>
 
-    <!-- رپورٹ -->
+    <!-- Reports -->
     <section id="tab-report" class="hidden">
       <div class="toolbar">
-        <label class="entry-owner">رپورٹ دیکھیں <select id="reportUser"><option value="">تمام یوزرز</option></select></label>
+        <label class="entry-owner">View Report: <select id="reportUser"><option value="">All Users</option></select></label>
       </div>
-      <h2>صوبہ وار رپورٹ</h2>
+      <h2>Province-wise Report</h2>
       <div class="table-wrap"><table id="repProvince"></table></div>
-      <h2>ڈویژن وار رپورٹ</h2>
+      <h2>Division-wise Report</h2>
       <div class="table-wrap"><table id="repDivision"></table></div>
-      <h2>ڈسٹرکٹ وار رپورٹ</h2>
+      <h2>District-wise Report</h2>
       <div class="table-wrap"><table id="repDistrict"></table></div>
     </section>
 
-    <!-- یوزرز -->
+    <!-- Users -->
     <section id="tab-users" class="hidden">
       <div class="toolbar">
-        <h2 style="margin:0">یوزرز</h2>
-        <input type="text" id="uSearch" placeholder="یوزر آئی ڈی یا علاقہ تلاش کریں">
+        <h2 style="margin:0">Users</h2>
+        <input type="text" id="uSearch" placeholder="Search User ID or region">
         <select id="uFilterRole">
-          <option value="">تمام کردار</option>
-          <option value="user">یوزر</option>
-          <option value="admin">ایڈمن</option>
+          <option value="">All Roles</option>
+          <option value="user">User</option>
+          <option value="admin">Admin</option>
         </select>
         <select id="uFilterProvince"></select>
         <select id="uFilterStatus">
-          <option value="">تمام حالت</option>
-          <option value="active">فعال</option>
-          <option value="inactive">بند</option>
+          <option value="">All Status</option>
+          <option value="active">Active</option>
+          <option value="inactive">Inactive</option>
         </select>
         <span class="spacer"></span>
-        <button class="btn" id="addUserBtn">نیا یوزر</button>
+        <button class="btn" id="addUserBtn">Add User</button>
       </div>
       <div class="table-wrap"><table id="userTable"></table></div>
-      <p class="note">یوزر صرف ایڈمن کے اسائن کیے ہوئے صوبوں/ڈویژنز کے مدرسین دیکھے گا۔ ایک ہی علاقہ دوسرے یوزر کو بھی اسائن ہو تو بنیادی ریکارڈ دونوں کو نظر آئے گا، مگر ہر یوزر کی انٹری الگ اور دوسرے یوزرز سے مخفی رہے گی۔ ایڈمن تمام انٹریاں دیکھ سکتا ہے۔</p>
+      <p class="note">Users only see teachers in the provinces/divisions assigned by the admin. If the same region is assigned to multiple users, each user's entries remain separate and hidden from other users. Admin can view and edit all entries.</p>
     </section>
 
-    <!-- لاگ -->
+    <!-- Activity Log -->
     <section id="tab-log" class="hidden">
-      <h2>آخری 300 سرگرمیاں</h2>
+      <h2>Last 300 Activities</h2>
       <div class="table-wrap"><table id="logTable"></table></div>
     </section>
 
-    <!-- سیٹنگز -->
+    <!-- Settings -->
     <section id="tab-settings" class="hidden">
-      <h2>ایڈمن کا نام اور پاس ورڈ</h2>
+      <h2>Admin Password</h2>
       <form id="adminForm" class="form-grid" autocomplete="off">
-        <label>نیا یوزر آئی ڈی<input type="text" id="aName" autocomplete="username" required></label>
-        <label>موجودہ پاس ورڈ<input type="password" id="aCur" required autocomplete="current-password"></label>
-        <label>نیا پاس ورڈ (اختیاری)<input type="password" id="aNew" autocomplete="new-password"></label>
-        <label>نیا پاس ورڈ دوبارہ<input type="password" id="aNew2" autocomplete="new-password"></label>
-        <button class="btn" type="submit">محفوظ کریں</button>
+        <label>User ID<input type="text" id="aName" autocomplete="username" required></label>
+        <label>Current Password<input type="password" id="aCur" required autocomplete="current-password"></label>
+        <label>New Password<input type="password" id="aNew" autocomplete="new-password"></label>
+        <label>Confirm New Password<input type="password" id="aNew2" autocomplete="new-password"></label>
+        <button class="btn" type="submit">Save</button>
         <p id="adminMsg" class="err"></p>
       </form>
 
-      <h2>بیک اپ</h2>
+      <h2>Backup</h2>
       <div class="toolbar">
-        <button class="btn" id="backupBtn">بیک اپ ڈاؤن لوڈ</button>
-        <label class="btn-light" for="restoreFile">بیک اپ بحال کریں</label>
+        <button class="btn" id="backupBtn">Download Backup</button>
+        <label class="btn-light" for="restoreFile">Restore Backup</label>
         <input type="file" id="restoreFile" accept=".json" hidden>
       </div>
-      <p class="note">بیک اپ میں تمام ریکارڈ اور یوزرز کی انٹریاں شامل ہوتی ہیں۔ اسے محفوظ رکھیں اور کسی کے ساتھ شیئر نہ کریں۔ یوزر اکاؤنٹس Firebase میں محفوظ رہتے ہیں۔</p>
+      <p class="note">The backup includes all records and user entries. Keep it secure and do not share it publicly. User accounts are stored in Firebase.</p>
     </section>
   </main>
 </div>
 
-<!-- یوزر ڈائیلاگ -->
+<!-- User Dialog -->
 <dialog id="userDlg">
   <form id="userForm" autocomplete="off">
-    <h3 id="userDlgTitle">نیا یوزر</h3>
-    <label>یوزر آئی ڈی<input type="text" id="uName" autocomplete="username" required maxlength="30"></label>
-    <label id="uPassLabel">پاس ورڈ<input type="password" id="uPass" autocomplete="new-password"></label>
-    <label>کردار
-      <select id="uRole"><option value="user">یوزر</option><option value="admin">ایڈمن</option></select>
+    <h3 id="userDlgTitle">Add User</h3>
+    <label>User ID<input type="text" id="uName" autocomplete="username" required maxlength="30"></label>
+    <label id="uPassLabel">Password<input type="password" id="uPass" autocomplete="new-password"></label>
+    <label>Role
+      <select id="uRole"><option value="user">User</option><option value="admin">Admin</option></select>
     </label>
     <div id="scopeBox">
-      <div>صوبے منتخب کریں؛ پورے صوبے کے لیے ڈویژن خالی چھوڑیں</div>
+      <div>Select provinces (leave divisions unchecked for full province)</div>
       <div id="uScopeSelections" class="scope-checks"></div>
     </div>
-    <label class="inline"><input type="checkbox" id="uActive" checked> اکاؤنٹ فعال ہے</label>
+    <label class="inline"><input type="checkbox" id="uActive" checked> Account Active</label>
     <p id="userErr" class="err"></p>
     <div class="dlg-actions">
-      <button type="submit" class="btn">محفوظ کریں</button>
-      <button type="button" class="btn-light" id="userCancel">منسوخ</button>
+      <button type="submit" class="btn">Save</button>
+      <button type="button" class="btn-light" id="userCancel">Cancel</button>
     </div>
   </form>
 </dialog>
 
-<!-- تصدیقِ جمع ڈائیلاگ -->
+<!-- Confirm Dialog -->
 <dialog id="confirmDlg" class="confirm-dlg">
   <div class="confirm-head">
     <span id="confirmIcon" class="confirm-icon">⚠️</span>
-    <h3 id="confirmTitle">تصدیقِ اندراج</h3>
+    <h3 id="confirmTitle">Confirm Submission</h3>
   </div>
   <div id="confirmMsg" class="confirm-msg"></div>
   <div id="confirmDetails" class="confirm-details hidden"></div>
   <div class="dlg-actions confirm-actions">
-    <button type="button" class="btn" id="confirmOkBtn">ہاں، جمع کریں</button>
-    <button type="button" class="btn-light" id="confirmCancelBtn">منسوخ کریں</button>
+    <button type="button" class="btn" id="confirmOkBtn">Yes, Submit</button>
+    <button type="button" class="btn-light" id="confirmCancelBtn">Cancel</button>
   </div>
 </dialog>
 
-<!-- گلوبل لوڈر -->
+<!-- Global Loader -->
 <div id="globalLoader" class="loader-overlay hidden" role="status" aria-live="polite">
   <div class="loader-card">
     <span class="spinner spinner-lg" aria-hidden="true"></span>
-    <div id="loaderText" class="loader-text">براہِ کرم انتظار کریں...</div>
+    <div id="loaderText" class="loader-text">Please wait...</div>
   </div>
 </div>
 
