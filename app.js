@@ -141,15 +141,27 @@ function hasRegion(user, row) {
 }
 
 function visibleRows() {
-  return DATA.filter(row => me && (me.role === "admin" || row.assignedTo?.includes(me.id)) && hasRegion(me, row));
+  if (!me) return [];
+  if (me.role === "admin") {
+    const selectedUid = $("entryUser")?.value || "";
+    if (selectedUid && selectedUid !== me.id) {
+      return DATA.filter(row => row.assignedTo?.includes(selectedUid));
+    }
+    return DATA;
+  }
+  return DATA.filter(row => row.assignedTo?.includes(me.id) && hasRegion(me, row));
 }
 
 function entryOwnerId() {
-  return me.role === "admin" ? ($("entryUser").value || me.id) : me.id;
+  return me?.role === "admin" ? ($("entryUser")?.value || "") : (me?.id || "");
 }
 
 function entryFor(record, ownerId = entryOwnerId()) {
-  return ENTRIES.find(entry => entry.recordId === record.id && entry.userId === ownerId);
+  if (ownerId) {
+    return ENTRIES.find(entry => entry.recordId === record.id && entry.userId === ownerId);
+  }
+  const matches = ENTRIES.filter(entry => entry.recordId === record.id);
+  return matches.find(e => e.submitted || isDone(e)) || matches[0];
 }
 
 function saveLog(action, detail = "") {
@@ -273,6 +285,7 @@ function showApp(user) {
       });
       usersLoaded = true;
       fillEntryUsers();
+      fillReportUsers();
       fillUserProvinceFilter();
       refreshAll();
       if (!$("tab-users").classList.contains("hidden")) renderUsers();
@@ -306,10 +319,10 @@ function resetLoginPassword() {
 }
 
 function resetAllFilters() {
-  ["fSearch", "fProvince", "fDivision", "fDistrict", "fBranch", "fDuty", "fStatus",
-    "uSearch", "uFilterRole", "uFilterProvince", "uFilterStatus"].forEach(id => {
+  ["fSearch", "fStatus", "uSearch", "uFilterRole", "uFilterProvince", "uFilterStatus"].forEach(id => {
     if ($(id)) $(id).value = "";
   });
+  Object.values(multiFilters).forEach(mf => mf.clear(true));
   page = 1;
 }
 
@@ -435,15 +448,125 @@ setInterval(async () => {
   }
 }, 15000);
 
+function createMultiFilter(containerId, allLabel, pluralLabel, onChange) {
+  const wrap = $(containerId);
+  wrap.innerHTML = `<button type="button" class="ms-btn"><span class="ms-text">${esc(allLabel)}</span><span class="ms-caret">▾</span></button>
+    <div class="ms-menu hidden">
+      <div class="ms-top"><input type="text" class="ms-search" placeholder="تلاش..."><button type="button" class="ms-clear">صاف</button></div>
+      <div class="ms-list"></div>
+    </div>`;
+  const btn = wrap.querySelector(".ms-btn");
+  const textEl = wrap.querySelector(".ms-text");
+  const menu = wrap.querySelector(".ms-menu");
+  const searchEl = wrap.querySelector(".ms-search");
+  const clearBtn = wrap.querySelector(".ms-clear");
+  const listEl = wrap.querySelector(".ms-list");
+  const selected = new Set();
+  let options = [];
+
+  function updateLabel() {
+    if (!selected.size) {
+      textEl.textContent = allLabel;
+      btn.classList.remove("active");
+    } else if (selected.size === 1) {
+      textEl.textContent = [...selected][0];
+      btn.classList.add("active");
+    } else {
+      textEl.textContent = `${selected.size} ${pluralLabel}`;
+      btn.classList.add("active");
+    }
+    btn.title = selected.size ? [...selected].join("، ") : allLabel;
+  }
+
+  function applySearch() {
+    const q = searchEl.value.trim().toLowerCase();
+    listEl.querySelectorAll(".ms-opt").forEach(opt => {
+      opt.classList.toggle("hidden", !!(q && !opt.dataset.val.toLowerCase().includes(q)));
+    });
+  }
+
+  function renderList() {
+    listEl.innerHTML = options.length
+      ? options.map(val => `<label class="ms-opt" data-val="${esc(val)}"><input type="checkbox" value="${esc(val)}" ${selected.has(val) ? "checked" : ""}><span>${esc(val)}</span></label>`).join("")
+      : '<div class="ms-empty">کوئی آپشن نہیں</div>';
+    applySearch();
+  }
+
+  btn.addEventListener("click", event => {
+    event.stopPropagation();
+    const wasHidden = menu.classList.contains("hidden");
+    document.querySelectorAll(".ms-menu").forEach(m => m.classList.add("hidden"));
+    if (wasHidden) {
+      menu.classList.remove("hidden");
+      menu.style.right = "0";
+      menu.style.left = "auto";
+      if (menu.getBoundingClientRect().left < 8) {
+        menu.style.right = "auto";
+        menu.style.left = "0";
+      }
+      if (options.length > 8) searchEl.focus();
+    }
+  });
+
+  menu.addEventListener("click", event => event.stopPropagation());
+  searchEl.addEventListener("input", applySearch);
+  listEl.addEventListener("change", event => {
+    const cb = event.target;
+    if (cb.type !== "checkbox") return;
+    if (cb.checked) selected.add(cb.value);
+    else selected.delete(cb.value);
+    updateLabel();
+    onChange();
+  });
+  clearBtn.addEventListener("click", () => {
+    if (!selected.size && !searchEl.value) return;
+    selected.clear();
+    searchEl.value = "";
+    renderList();
+    updateLabel();
+    onChange();
+  });
+
+  return {
+    setOptions(values) {
+      options = values;
+      const valid = new Set(values);
+      for (const item of [...selected]) {
+        if (!valid.has(item)) selected.delete(item);
+      }
+      renderList();
+      updateLabel();
+    },
+    getSelected() { return selected; },
+    clear(silent = false) {
+      selected.clear();
+      searchEl.value = "";
+      renderList();
+      updateLabel();
+      if (!silent) onChange();
+    }
+  };
+}
+
+document.addEventListener("click", () => document.querySelectorAll(".ms-menu").forEach(m => m.classList.add("hidden")));
+document.addEventListener("keydown", event => {
+  if (event.key === "Escape") document.querySelectorAll(".ms-menu").forEach(m => m.classList.add("hidden"));
+});
+
+const multiFilters = {
+  province: createMultiFilter("fProvince", "تمام صوبے", "صوبے", () => { page = 1; fillFilters(); renderTable(); }),
+  division: createMultiFilter("fDivision", "تمام ڈویژنز", "ڈویژنز", () => { page = 1; fillFilters(); renderTable(); }),
+  district: createMultiFilter("fDistrict", "تمام اضلاع", "اضلاع", () => { page = 1; fillFilters(); renderTable(); }),
+  branch:   createMultiFilter("fBranch",   "تمام شاخیں", "شاخیں", () => { page = 1; fillFilters(); renderTable(); }),
+  duty:     createMultiFilter("fDuty",     "تمام ذمہ داریاں", "ذمہ داریاں", () => { page = 1; renderTable(); })
+};
+
 function fillProvinceSelects() {
   if (!me) return;
   const provList = me.role === "admin"
     ? provinces
     : [...new Set(visibleRows().map(r => r[K.province]).filter(Boolean))].sort();
-  const current = $("fProvince").value;
-  $("fProvince").innerHTML = '<option value="">تمام صوبے</option>' +
-    provList.map(p => `<option value="${esc(p)}">${esc(p)}</option>`).join("");
-  if (provList.includes(current)) $("fProvince").value = current;
+  multiFilters.province.setOptions(provList);
   $("fProvince").classList.toggle("hidden", me.role !== "admin" && provList.length <= 1);
 }
 
@@ -456,30 +579,39 @@ function fillFilter(select, label, values) {
 
 function fillFilters() {
   let rows = visibleRows();
-  if (!$("fProvince").classList.contains("hidden") && $("fProvince").value) {
-    rows = rows.filter(r => r[K.province] === $("fProvince").value);
-  }
+  const selProvs = $("fProvince").classList.contains("hidden") ? new Set() : multiFilters.province.getSelected();
+  if (selProvs.size) rows = rows.filter(r => selProvs.has(r[K.province]));
   const unique = field => [...new Set(rows.map(r => r[field]).filter(Boolean))].sort();
-  fillFilter($("fDivision"), "تمام ڈویژنز", unique(K.division));
-  if ($("fDivision").value) rows = rows.filter(r => r[K.division] === $("fDivision").value);
-  fillFilter($("fDistrict"), "تمام اضلاع", unique(K.district));
-  if ($("fDistrict").value) rows = rows.filter(r => r[K.district] === $("fDistrict").value);
-  fillFilter($("fBranch"), "تمام شاخیں", unique(K.branch));
-  if ($("fBranch").value) rows = rows.filter(r => r[K.branch] === $("fBranch").value);
-  fillFilter($("fDuty"), "تمام ذمہ داریاں", unique(K.duty));
+
+  multiFilters.division.setOptions(unique(K.division));
+  const selDivs = multiFilters.division.getSelected();
+  if (selDivs.size) rows = rows.filter(r => selDivs.has(r[K.division]));
+
+  multiFilters.district.setOptions(unique(K.district));
+  const selDists = multiFilters.district.getSelected();
+  if (selDists.size) rows = rows.filter(r => selDists.has(r[K.district]));
+
+  multiFilters.branch.setOptions(unique(K.branch));
+  const selBranches = multiFilters.branch.getSelected();
+  if (selBranches.size) rows = rows.filter(r => selBranches.has(r[K.branch]));
+
+  multiFilters.duty.setOptions(unique(K.duty));
 }
 
 function filteredRows() {
   const search = $("fSearch").value.trim().toLowerCase();
-  const province = $("fProvince").classList.contains("hidden") ? "" : $("fProvince").value;
-  const division = $("fDivision").value, district = $("fDistrict").value;
-  const branch = $("fBranch").value, duty = $("fDuty").value, status = $("fStatus").value;
+  const selProvs = $("fProvince").classList.contains("hidden") ? new Set() : multiFilters.province.getSelected();
+  const selDivs = multiFilters.division.getSelected();
+  const selDists = multiFilters.district.getSelected();
+  const selBranches = multiFilters.branch.getSelected();
+  const selDuties = multiFilters.duty.getSelected();
+  const status = $("fStatus").value;
   return visibleRows().filter(row => {
-    if (province && row[K.province] !== province) return false;
-    if (division && row[K.division] !== division) return false;
-    if (district && row[K.district] !== district) return false;
-    if (branch && row[K.branch] !== branch) return false;
-    if (duty && row[K.duty] !== duty) return false;
+    if (selProvs.size && !selProvs.has(row[K.province])) return false;
+    if (selDivs.size && !selDivs.has(row[K.division])) return false;
+    if (selDists.size && !selDists.has(row[K.district])) return false;
+    if (selBranches.size && !selBranches.has(row[K.branch])) return false;
+    if (selDuties.size && !selDuties.has(row[K.duty])) return false;
     const entry = entryFor(row);
     if (status === "done" && !isDone(entry)) return false;
     if (status === "pending" && isDone(entry)) return false;
@@ -535,20 +667,20 @@ function renderTable() {
   if (page > pages) page = pages;
   const slice = rows.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
   const ownerId = entryOwnerId();
-  const canEdit = ownerId === me.id;
   const isAdmin = me.role === "admin";
   $("dataTable").querySelector("tbody").innerHTML = slice.map((row, i) => {
     const saved = entryFor(row, ownerId) || {};
     const locked = isEntryLocked(saved);
-    const editable = canEdit && (!locked || isAdmin);
+    const editable = isAdmin || !locked;
     const entry = editable && DRAFT_ENTRIES.has(row.id) ? DRAFT_ENTRIES.get(row.id) : saved;
+    const ownerUser = saved.userId ? USERS.find(u => u.id === saved.userId) : null;
+    const ownerBadge = ownerUser ? ownerUser.username : (saved.updatedBy || "");
     let actionCell;
-    if (!canEdit) {
-      actionCell = locked ? '<span class="tag submitted-tag">✓ جمع شدہ</span>' : '<span class="tag pending-tag">باقی</span>';
-    } else if (locked && !isAdmin) {
+    if (locked && !isAdmin) {
       actionCell = '<span class="tag submitted-tag">✓ جمع شدہ</span>';
     } else if (locked && isAdmin) {
-      actionCell = `<span class="tag submitted-tag">✓ جمع شدہ</span> <button type="button" class="btn-light row-submit-btn" data-act="submit-row" data-id="${esc(row.id)}">اپڈیٹ</button>`;
+      const label = ownerBadge ? `✓ ${esc(ownerBadge)}` : "✓ جمع شدہ";
+      actionCell = `<span class="tag submitted-tag">${label}</span> <button type="button" class="btn-light row-submit-btn" data-act="submit-row" data-id="${esc(row.id)}">اپڈیٹ</button>`;
     } else {
       actionCell = `<button type="button" class="btn row-submit-btn" data-act="submit-row" data-id="${esc(row.id)}">جمع کریں</button>`;
     }
@@ -596,8 +728,9 @@ $("dataTable").addEventListener("change", event => {
   const select = event.target;
   if (select.tagName !== "SELECT" || !select.dataset.id) return;
   const row = DATA.find(r => r.id === select.dataset.id);
-  const saved = row ? (entryFor(row, me.id) || {}) : {};
-  if (!row || (me.role !== "admin" && (!row.assignedTo?.includes(me.id) || isEntryLocked(saved))) || entryOwnerId() !== me.id) {
+  const saved = row ? (entryFor(row) || {}) : {};
+  const isAdmin = me?.role === "admin";
+  if (!row || (!isAdmin && (!row.assignedTo?.includes(me.id) || isEntryLocked(saved)))) {
     refreshAll();
     return;
   }
@@ -632,9 +765,9 @@ $("dataTable").addEventListener("click", async event => {
   const button = event.target.closest('button[data-act="submit-row"]');
   if (!button) return;
   const row = DATA.find(r => r.id === button.dataset.id);
-  const saved = row ? (entryFor(row, me.id) || {}) : {};
+  const saved = row ? (entryFor(row) || {}) : {};
   const isAdmin = me?.role === "admin";
-  if (!row || (!isAdmin && (!row.assignedTo?.includes(me.id) || isEntryLocked(saved))) || entryOwnerId() !== me.id) {
+  if (!row || (!isAdmin && (!row.assignedTo?.includes(me.id) || isEntryLocked(saved)))) {
     await showConfirmModal({
       icon: "⛔", title: "اجازت نہیں",
       message: "اس ریکارڈ میں تبدیلی کی اجازت نہیں ہے۔",
@@ -647,7 +780,7 @@ $("dataTable").addEventListener("click", async event => {
   const draft = DRAFT_ENTRIES.get(row.id) || {
     [K.hifz]: saved[K.hifz] || "", [K.nazra]: saved[K.nazra] || ""
   };
-  if (![YES, NO].includes(draft[K.hifz]) || ![YES, NO].includes(draft[K.nazra])) {
+  if (!isAdmin && (![YES, NO].includes(draft[K.hifz]) || ![YES, NO].includes(draft[K.nazra]))) {
     await showConfirmModal({
       icon: "ℹ️", title: "نامکمل معلومات",
       message: "براہِ کرم جمع کرانے سے پہلے حفظ اور ناظرہ دونوں سوالات کے جواب منتخب کریں۔",
@@ -656,41 +789,67 @@ $("dataTable").addEventListener("click", async event => {
     return;
   }
 
+  const isClearing = isAdmin && !draft[K.hifz] && !draft[K.nazra];
+  if (isClearing && !saved.id) {
+    await showConfirmModal({
+      icon: "ℹ️", title: "کوئی انٹری نہیں",
+      message: "اس ریکارڈ میں ابھی کوئی انٹری محفوظ نہیں ہے۔",
+      okText: "ٹھیک ہے", showCancel: false
+    });
+    return;
+  }
+
+  const isUpdate = isAdmin && isEntryLocked(saved);
   const detailsHtml = `
     <div><b>عملہ کوڈ:</b> ${esc(row[K.code])}</div>
     <div><b>نام:</b> ${esc(row[K.name])} (${esc(row[K.father])})</div>
-    <div><b>حفظ کا درجہ:</b> ${esc(draft[K.hifz])}</div>
-    <div><b>ناظرہ کا درجہ:</b> ${esc(draft[K.nazra])}</div>
+    <div><b>حفظ کا درجہ:</b> ${esc(draft[K.hifz] || "خالی")}</div>
+    <div><b>ناظرہ کا درجہ:</b> ${esc(draft[K.nazra] || "خالی")}</div>
   `;
   const confirmed = await showConfirmModal({
     icon: "⚠️",
-    title: "ڈیٹا جمع کرانے کی تصدیق",
-    message: "کیا آپ واقعی یہ ڈیٹا جمع کرنا چاہتے ہیں؟ کیونکہ بعد میں اس میں تبدیلی نہیں ہوگی۔",
+    title: isClearing ? "انٹری ختم کرنے کی تصدیق" : (isUpdate ? "اندراج اپڈیٹ کرنے کی تصدیق" : "ڈیٹا جمع کرانے کی تصدیق"),
+    message: isClearing
+      ? "کیا آپ واقعی یہ محفوظ شدہ انٹری ختم (خالی) کرنا چاہتے ہیں؟ اس کے بعد یوزر دوبارہ انٹری کر سکے گا۔"
+      : (isUpdate
+        ? "کیا آپ واقعی اس اندراج میں کی گئی تبدیلی محفوظ کرنا چاہتے ہیں؟"
+        : "کیا آپ واقعی یہ ڈیٹا جمع کرنا چاہتے ہیں؟ کیونکہ بعد میں اس میں تبدیلی نہیں ہوگی۔"),
     detailsHtml,
-    okText: "ہاں، جمع کریں",
+    okText: isClearing ? "ہاں، ختم کریں" : (isUpdate ? "ہاں، اپڈیٹ کریں" : "ہاں، جمع کریں"),
     cancelText: "منسوخ کریں",
     showCancel: true
   });
   if (!confirmed) return;
 
-  setButtonBusy(button, true, "محفوظ ہو رہا ہے...");
+  setButtonBusy(button, true, isClearing ? "ختم ہو رہی ہے..." : "محفوظ ہو رہا ہے...");
+  const targetUserId = saved.userId || entryOwnerId() || me.id;
+  const entryDocId = saved.id || `${row.id}__${targetUserId}`;
   const now = nowStr();
   const entry = {
     recordId: row.id,
-    userId: me.id,
+    userId: targetUserId,
     [K.hifz]: draft[K.hifz],
     [K.nazra]: draft[K.nazra],
-    submitted: true,
-    submittedAt: saved.submittedAt || now,
+    submitted: isDone(draft),
+    submittedAt: isDone(draft) ? (saved.submittedAt || now) : "",
     updatedBy: me.username,
     updatedAt: now
   };
   try {
-    await withLoader("ڈیٹا محفوظ ہو رہا ہے...", async () => {
-      await setDoc(doc(db, "entries", `${row.id}__${me.id}`), entry);
+    await withLoader(isClearing ? "انٹری ختم کی جا رہی ہے..." : "ڈیٹا محفوظ ہو رہا ہے...", async () => {
+      if (isClearing) {
+        await deleteDoc(doc(db, "entries", entryDocId));
+      } else {
+        await setDoc(doc(db, "entries", entryDocId), entry);
+      }
       DRAFT_ENTRIES.delete(row.id);
-      await saveLog("انٹری جمع", `${row[K.code]} — حفظ: ${entry[K.hifz]}، ناظرہ: ${entry[K.nazra]}`);
     });
+    const logAction = isClearing ? "انٹری ختم" : (isUpdate ? "انٹری اپڈیٹ" : "انٹری جمع");
+    const logDetail = isClearing
+      ? `${row[K.code]} — انٹری خالی کر دی گئی`
+      : `${row[K.code]} — حفظ: ${entry[K.hifz] || "-"}، ناظرہ: ${entry[K.nazra] || "-"}`;
+    saveLog(logAction, logDetail)
+      .catch(error => reportError("کارروائی مکمل ہو گئی، مگر سرگرمی لاگ محفوظ نہیں ہوا", error));
   } catch (error) {
     setButtonBusy(button, false);
     await showConfirmModal({
@@ -701,30 +860,42 @@ $("dataTable").addEventListener("click", async event => {
   }
 });
 
-["fSearch", "fDuty", "fStatus"].forEach(id =>
-  $(id).addEventListener("input", () => { page = 1; renderTable(); }));
-$("fBranch").addEventListener("change", () => { $("fDuty").value = ""; page = 1; fillFilters(); renderTable(); });
-$("fDistrict").addEventListener("change", () => {
-  $("fBranch").value = ""; $("fDuty").value = ""; page = 1; fillFilters(); renderTable();
-});
-$("fDivision").addEventListener("change", () => {
-  $("fDistrict").value = ""; $("fBranch").value = ""; $("fDuty").value = ""; page = 1; fillFilters(); renderTable();
-});
-$("fProvince").addEventListener("change", () => {
-  $("fDivision").value = ""; $("fDistrict").value = ""; $("fBranch").value = ""; $("fDuty").value = "";
-  page = 1; fillFilters(); renderTable();
+$("fSearch").addEventListener("input", () => { page = 1; renderTable(); });
+$("fStatus").addEventListener("change", () => { page = 1; renderTable(); });
+$("clearFiltersBtn").addEventListener("click", () => {
+  $("fSearch").value = "";
+  $("fStatus").value = "";
+  Object.values(multiFilters).forEach(mf => mf.clear(true));
+  page = 1;
+  fillFilters();
+  renderTable();
 });
 
 function fillEntryUsers() {
   if (!me || me.role !== "admin") return;
-  const current = $("entryUser").value;
-  $("entryUser").innerHTML = USERS.map(user =>
+  const select = $("entryUser");
+  const current = select.value;
+  select.innerHTML = '<option value="">تمام یوزرز</option>' + USERS.map(user =>
     `<option value="${esc(user.id)}">${esc(user.username)}${user.id === me.id ? " (ایڈمن)" : ""}</option>`
   ).join("");
-  if (USERS.some(user => user.id === current)) $("entryUser").value = current;
-  else $("entryUser").value = me.id;
+  select.value = USERS.some(user => user.id === current) ? current : "";
 }
-$("entryUser").addEventListener("change", () => { page = 1; refreshAll(); });
+function fillReportUsers() {
+  if (!me || me.role !== "admin") return;
+  const select = $("reportUser");
+  const current = select.value;
+  select.innerHTML = '<option value="">تمام یوزرز</option>' + USERS.map(user =>
+    `<option value="${esc(user.id)}">${esc(user.username)}${user.active ? "" : " (غیر فعال)"}</option>`
+  ).join("");
+  select.value = USERS.some(user => user.id === current) ? current : "";
+}
+$("entryUser").addEventListener("change", () => {
+  DRAFT_ENTRIES.clear();
+  page = 1;
+  fillProvinceSelects();
+  refreshAll();
+});
+$("reportUser").addEventListener("change", renderReport);
 
 $("refreshBtn").addEventListener("click", async () => {
   if (!me) return;
@@ -856,18 +1027,13 @@ function reportRow(label, group) {
     <td class="rem-num">${remaining}</td><td>${percent}%<span class="bar"><i style="width:${percent}%"></i></span></td></tr>`;
 }
 
-function renderGroupedReport(field, table, label) {
+function renderGroupedReport(field, table, label, reportRows, completedRecords) {
   const groups = new Map();
-  const ownerId = $("entryUser").value || me.id;
-  const reportRows = me.role === "admin" && ownerId !== me.id
-    ? DATA.filter(row => row.assignedTo?.includes(ownerId))
-    : visibleRows();
   reportRows.forEach(row => {
     const key = `${row[K.province]}||${row[field] || "نامعلوم"}`;
-    const entry = entryFor(row, ownerId);
     const group = groups.get(key) || { total: 0, done: 0 };
     group.total++;
-    if (isDone(entry)) group.done++;
+    if (completedRecords.has(row.id)) group.done++;
     groups.set(key, group);
   });
   const body = [...groups.entries()].sort((a, b) => a[0].localeCompare(b[0])).map(([key, group]) => {
@@ -881,15 +1047,18 @@ function renderGroupedReport(field, table, label) {
 }
 
 function renderReport() {
-  const ownerId = $("entryUser").value || me.id;
-  const reportRows = me.role === "admin" && ownerId !== me.id
+  const ownerId = $("reportUser").value;
+  const reportRows = ownerId
     ? DATA.filter(row => row.assignedTo?.includes(ownerId))
-    : visibleRows();
+    : DATA;
+  const completedRecords = new Set(ENTRIES
+    .filter(entry => (!ownerId || entry.userId === ownerId) && isDone(entry))
+    .map(entry => entry.recordId));
   const groups = new Map();
   reportRows.forEach(row => {
     const group = groups.get(row[K.province]) || { total: 0, done: 0 };
     group.total++;
-    if (isDone(entryFor(row, ownerId))) group.done++;
+    if (completedRecords.has(row.id)) group.done++;
     groups.set(row[K.province], group);
   });
   let total = 0, done = 0;
@@ -900,8 +1069,8 @@ function renderReport() {
   }).join("");
   $("repProvince").innerHTML = `<thead><tr><th>صوبہ</th><th>کل انٹریاں</th><th>مکمل</th><th>باقی</th><th>پیش رفت</th></tr></thead>
     <tbody>${body}</tbody><tfoot>${reportRow("کل", { total, done })}</tfoot>`;
-  renderGroupedReport(K.division, "repDivision", "ڈویژن");
-  renderGroupedReport(K.district, "repDistrict", "ڈسٹرکٹ");
+  renderGroupedReport(K.division, "repDivision", "ڈویژن", reportRows, completedRecords);
+  renderGroupedReport(K.district, "repDistrict", "ڈسٹرکٹ", reportRows, completedRecords);
 }
 
 $("tabs").addEventListener("click", event => {

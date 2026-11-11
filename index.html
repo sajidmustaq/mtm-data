@@ -9,7 +9,7 @@
 <link rel="icon" href="data:,">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Noto+Naskh+Arabic:wght@400;600;700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="style.css?v=20261111-v2">
+<link rel="stylesheet" href="style.css?v=20261111-v3">
 </head>
 <body>
 
@@ -56,27 +56,31 @@
   <main>
     <!-- ڈیٹا انٹری -->
     <section id="tab-entry">
-      <div class="summary" id="miniSummary"></div>
+      <div class="entry-top">
+        <div class="summary" id="miniSummary"></div>
+        <div class="entry-actions">
+          <button type="button" class="btn-light" id="clearFiltersBtn" title="تمام فلٹرز صاف کریں">فلٹر صاف</button>
+          <button type="button" class="btn-light" id="refreshBtn" title="سرور سے تازہ ڈیٹا لوڈ کریں">تازہ کریں</button>
+          <button class="btn" id="exportBtn">ایکسل ایکسپورٹ</button>
+          <label class="btn admin-only" for="importFile">امپورٹ (ایکسل / JSON)</label>
+          <input type="file" id="importFile" accept=".xlsx,.xls,.csv,.json" hidden>
+          <button class="btn-light admin-only" id="templateBtn">خالی فارم</button>
+        </div>
+      </div>
 
-      <div class="toolbar">
+      <div class="filter-bar">
         <input type="text" id="fSearch" placeholder="نام، کوڈ، ولدیت یا شاخ سے تلاش">
-        <select id="fProvince"></select>
-        <select id="fDivision"></select>
-        <select id="fDistrict"></select>
-        <select id="fBranch"></select>
-        <select id="fDuty"></select>
+        <div id="fProvince" class="ms-wrap"></div>
+        <div id="fDivision" class="ms-wrap"></div>
+        <div id="fDistrict" class="ms-wrap"></div>
+        <div id="fBranch" class="ms-wrap"></div>
+        <div id="fDuty" class="ms-wrap"></div>
         <label class="admin-only entry-owner">انٹری دیکھیں <select id="entryUser"></select></label>
         <select id="fStatus">
-          <option value="">تمام</option>
+          <option value="">حالت: تمام</option>
           <option value="pending">باقی</option>
           <option value="done">مکمل</option>
         </select>
-        <span class="spacer"></span>
-        <button class="btn-light" id="refreshBtn" title="سرور سے تازہ ڈیٹا لوڈ کریں">تازہ کریں</button>
-        <button class="btn" id="exportBtn">ایکسل ایکسپورٹ</button>
-        <label class="btn admin-only" for="importFile">امپورٹ (ایکسل / JSON)</label>
-        <input type="file" id="importFile" accept=".xlsx,.xls,.csv,.json" hidden>
-        <button class="btn-light admin-only" id="templateBtn">خالی فارم</button>
       </div>
 
       <div class="table-wrap">
@@ -108,6 +112,9 @@
 
     <!-- رپورٹ -->
     <section id="tab-report" class="hidden">
+      <div class="toolbar">
+        <label class="entry-owner">رپورٹ دیکھیں <select id="reportUser"><option value="">تمام یوزرز</option></select></label>
+      </div>
       <h2>صوبہ وار رپورٹ</h2>
       <div class="table-wrap"><table id="repProvince"></table></div>
       <h2>ڈویژن وار رپورٹ</h2>
@@ -213,6 +220,6 @@
 </div>
 
 <script src="xlsx.full.min.js"></script>
-<script type="module" src="app.js?v=20261111-v6"></script>
+<script type="module" src="app.js?v=20261111-v10"></script>
 </body>
 </html>
