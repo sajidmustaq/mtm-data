@@ -191,6 +191,14 @@ function hasRegion(user, row) {
     (!Array.isArray(a.divisions) || !a.divisions.length || a.divisions.some(d => nfc(d).trim() === div)));
 }
 
+function showUserTutorial(user) {
+  if (user.role === "admin") return;
+  const dlg = $("userTutorialDlg");
+  if (!dlg || dlg.open) return;
+  $("userTutorialOkBtn").onclick = () => dlg.close();
+  dlg.showModal();
+}
+
 function visibleRows() {
   if (!me) return [];
   if (me.role === "admin") {
@@ -482,7 +490,7 @@ async function loadRecords(user, forceServer = false) {
   }
 }
 
-function showApp(user) {
+function showApp(user, showTutorial = false) {
   stopListeners();
   me = user;
   lastActive = Date.now();
@@ -612,6 +620,7 @@ function showApp(user) {
   if (isAdmin) fillEntryUsers();
   fillProvinceSelects();
   refreshAll();
+  if (showTutorial) showUserTutorial(user);
 }
 
 function resetLoginPassword() {
@@ -662,7 +671,7 @@ async function fetchUserProfile(uid) {
 let activeUid = null;
 let authChain = Promise.resolve();
 
-async function handleAuthSession(session) {
+async function handleAuthSession(session, authEvent) {
   const account = session?.user || null;
   if (!account) {
     returnToLogin();
@@ -692,7 +701,7 @@ async function handleAuthSession(session) {
         : "";
     if (!username) throw new Error("یوزر پروفائل میں username موجود نہیں، اور Authentication اکاؤنٹ میں قابلِ شناخت یوزر آئی ڈی نہیں۔");
     const mapped = userFromDbRow({ ...profile, username, role });
-    showApp(mapped);
+    showApp(mapped, authEvent === "SIGNED_IN");
     saveLog("لاگ اِن").catch(error => reportError("لاگ اِن لاگ محفوظ نہیں ہوا", error));
   } catch (error) {
     await supabase.auth.signOut().catch(() => {});
@@ -708,7 +717,7 @@ async function handleAuthSession(session) {
 supabase.auth.onAuthStateChange((event, session) => {
   if (event === "TOKEN_REFRESHED" || event === "USER_UPDATED") return;
   setTimeout(() => {
-    authChain = authChain.then(() => handleAuthSession(session)).catch(err => {
+    authChain = authChain.then(() => handleAuthSession(session, event)).catch(err => {
       console.error("Auth error:", err);
       setButtonBusy($("lBtn"), false);
       $("bootView")?.classList.add("hidden");
@@ -1392,7 +1401,7 @@ function renderTable() {
       const label = ownerBadge ? `✓ ${esc(ownerBadge)}` : "✓ جمع شدہ";
       actionCell = `<span class="tag submitted-tag">${label}</span> <button type="button" class="btn-light row-submit-btn" data-act="submit-row" data-id="${esc(row.id)}">اپڈیٹ</button>`;
     } else {
-      actionCell = `<button type="button" class="btn row-submit-btn" data-act="submit-row" data-id="${esc(row.id)}">جمع کریں</button>`;
+      actionCell = `<button type="button" class="btn row-submit-btn" data-act="submit-row" data-id="${esc(row.id)}">محفوظ کریں </button>`;
     }
     return `<tr class="${isDone(saved) ? "done" : "pending"}">
       <td>${(page - 1) * PAGE_SIZE + i + 1}</td>
@@ -1520,14 +1529,14 @@ $("dataTable").addEventListener("click", async event => {
   `;
   const confirmed = await showConfirmModal({
     icon: "⚠️",
-    title: isClearing ? "انٹری ختم کرنے کی تصدیق" : (isUpdate ? "اندراج اپڈیٹ کرنے کی تصدیق" : "ڈیٹا جمع کرانے کی تصدیق"),
+    title: isClearing ? "انٹری ختم کرنے کی تصدیق" : (isUpdate ? "اندراج اپڈیٹ کرنے کی تصدیق" : "ڈیٹا محفوظ کرنے کی تصدیق"),
     message: isClearing
       ? "کیا آپ واقعی یہ محفوظ شدہ انٹری ختم (خالی) کرنا چاہتے ہیں؟ اس کے بعد یوزر دوبارہ انٹری کر سکے گا۔"
       : (isUpdate
         ? "کیا آپ واقعی اس اندراج میں کی گئی تبدیلی محفوظ کرنا چاہتے ہیں؟"
         : "کیا آپ واقعی یہ ڈیٹا جمع کرنا چاہتے ہیں؟ کیونکہ بعد میں اس میں تبدیلی نہیں ہوگی۔"),
     detailsHtml,
-    okText: isClearing ? "ہاں، ختم کریں" : (isUpdate ? "ہاں، اپڈیٹ کریں" : "ہاں، جمع کریں"),
+    okText: isClearing ? "ہاں، ختم کریں" : (isUpdate ? "ہاں، اپڈیٹ کریں" : "ہاں، محفوظ کریں"),
     cancelText: "منسوخ کریں",
     showCancel: true
   });

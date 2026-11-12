@@ -542,6 +542,50 @@ dialog.confirm-dlg::backdrop {
 .confirm-actions { justify-content: flex-start; margin-top: 8px; }
 .confirm-actions .btn, .confirm-actions .btn-light { border-radius: 5px; }
 
+dialog.user-tutorial-dlg {
+  width: min(540px, 94vw);
+  border-radius: 10px;
+  padding: 22px 24px;
+  box-shadow: 0 18px 45px rgba(0, 0, 0, .22);
+  line-height: 1.8;
+}
+dialog.user-tutorial-dlg::backdrop {
+  background: rgba(0, 0, 0, .45);
+  backdrop-filter: blur(2px);
+}
+.user-tutorial-dlg h3 { font-size: 20px; }
+.user-tutorial-dlg p { margin: 0 0 8px; }
+.user-tutorial-dlg ol { margin: 0; padding-right: 24px; }
+.user-tutorial-dlg li { margin: 8px 0; }
+.user-tutorial-dlg .dlg-actions { justify-content: flex-start; margin-top: 18px; }
+.user-tutorial-dlg .btn { border-radius: 5px; }
+.tutorial-select-demo, .tutorial-button-demo {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 8px;
+  padding: 8px 10px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: #f8faf8;
+}
+.tutorial-demo-label { color: #555; font-size: 14px; }
+.tutorial-demo-select {
+  display: inline-flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 24px;
+  min-width: 130px;
+  padding: 4px 9px;
+  border: 1px solid #aeb9b1;
+  border-radius: 4px;
+  background: #fff;
+  color: var(--text);
+  font-size: 14px;
+}
+.tutorial-demo-caret { color: #555; font-size: 10px; }
+.tutorial-demo-submit { padding: 4px 12px; font-size: 14px; }
+
 /* کسٹم الرٹ ڈائیلاگ */
 @keyframes customAlertIn {
   from { opacity: 0; transform: translateY(12px) scale(0.95); }

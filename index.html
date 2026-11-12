@@ -9,7 +9,7 @@
 <link rel="icon" type="image/svg+xml" href="logo.svg?v=1">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Noto+Naskh+Arabic:wght@400;600;700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="style.css?v=20261111-v12">
+<link rel="stylesheet" href="style.css?v=20261112-v14">
 </head>
 <body>
 
@@ -264,6 +264,32 @@
   </div>
 </dialog>
 
+<!-- New User Tutorial -->
+<dialog id="userTutorialDlg" class="user-tutorial-dlg" dir="rtl" aria-labelledby="userTutorialTitle">
+  <h3 id="userTutorialTitle">ڈیٹا درج کرنے کا طریقہ</h3>
+  <p>ہر مدرس کی قطار میں یہ مراحل مکمل کریں:</p>
+  <ol>
+    <li>
+      <span>اگر مدرس اجیر حفظ کی تدریس کر رہے ہیں تو <strong>حفظ کی تدریس؟</strong> میں <strong>جی ہاں</strong> منتخب کریں، ورنہ <strong>جی نہیں</strong>۔</span>
+      <div class="tutorial-select-demo" aria-label="حفظ کی تدریس کا ڈراپ ڈاؤن: جی ہاں">
+        <span class="tutorial-demo-label">حفظ کی تدریس؟</span>
+        <span class="tutorial-demo-select"><strong>جی ہاں</strong><span class="tutorial-demo-caret" aria-hidden="true">▼</span></span>
+      </div>
+    </li>
+    <li><strong>ناظرہ کی تدریس؟</strong> کا جواب بھی دیکھیں اور درست منتخب کریں۔ ایک سوال میں <strong>جی ہاں</strong> کرنے پر دوسرا خودکار <strong>جی نہیں</strong> ہو جائے گا۔</li>
+    <li>
+      <span>اس قطار کے <strong>عمل</strong> والے خانے میں <strong>جمع کریں / محفوظ کریں</strong> کا بٹن دبائیں۔ تصدیق کے لیے اگلے پیغام میں بھی محفوظ کرنے کی منظوری دیں۔</span>
+      <div class="tutorial-button-demo" aria-label="جمع کریں کا بٹن">
+        <span class="tutorial-demo-label">عمل</span>
+        <span class="btn tutorial-demo-submit">جمع کریں</span>
+      </div>
+    </li>
+  </ol>
+  <div class="dlg-actions">
+    <button type="button" class="btn" id="userTutorialOkBtn">سمجھ گیا</button>
+  </div>
+</dialog>
+
 <!-- Custom Alert Dialog -->
 <dialog id="customAlertDlg" class="custom-alert-dlg" dir="ltr" data-variant="warning" aria-labelledby="customAlertTitle" aria-describedby="customAlertMsg">
   <div class="custom-alert-card">
@@ -299,6 +325,6 @@
 <div id="excelFilterMenu" class="xf-menu hidden" role="dialog" aria-label="کالم فلٹر"></div>
 
 <script src="xlsx.full.min.js"></script>
-<script type="module" src="app.js?v=20261111-supa7"></script>
+<script type="module" src="app.js?v=20261112-supa9"></script>
 </body>
 </html>
