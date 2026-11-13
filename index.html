@@ -167,7 +167,34 @@
 
     <!-- Activity Log -->
     <section id="tab-log" class="hidden">
-      <h2>Last 300 Activities</h2>
+      <h2 style="margin:0 0 10px 0">Last 300 Activities</h2>
+      <div class="entry-top">
+        <div class="summary" id="logSummary"></div>
+        <div class="entry-actions">
+          <button type="button" class="btn-light" id="logClearFiltersBtn" title="Clear all log filters">Clear Filters</button>
+          <button type="button" class="btn-light" id="logRefreshBtn" title="Refresh activities">Refresh</button>
+        </div>
+      </div>
+
+      <div class="filter-bar">
+        <input type="text" id="logSearch" placeholder="Search user, action, detail...">
+        <select id="logUser">
+          <option value="">تمام یوزرز</option>
+        </select>
+        <select id="logProvince">
+          <option value="">تمام صوبے</option>
+        </select>
+        <select id="logDivision">
+          <option value="">تمام ڈویژنز</option>
+        </select>
+        <select id="logDistrict">
+          <option value="">تمام ڈسٹرکٹ</option>
+        </select>
+        <select id="logAction">
+          <option value="">تمام اعمال</option>
+        </select>
+      </div>
+
       <div class="table-wrap"><table id="logTable"></table></div>
     </section>
 

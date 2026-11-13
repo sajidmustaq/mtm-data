@@ -223,11 +223,58 @@ function entryFor(record, ownerId = entryOwnerId()) {
   return matches.find(e => e.submitted || isDone(e)) || matches[0];
 }
 
-async function saveLog(action, detail = "") {
+function getDeviceInfo() {
+  try {
+    const ua = navigator.userAgent || "";
+    let os = "OS";
+    if (/windows phone/i.test(ua)) os = "Windows Phone";
+    else if (/win/i.test(ua)) os = "Windows";
+    else if (/android/i.test(ua)) os = "Android";
+    else if (/iphone|ipad|ipod/i.test(ua)) os = "iOS";
+    else if (/mac/i.test(ua)) os = "Mac";
+    else if (/linux/i.test(ua)) os = "Linux";
+
+    let browser = "";
+    if (/edg/i.test(ua)) browser = "Edge";
+    else if (/chrome|crios/i.test(ua) && !/opr|opera/i.test(ua)) browser = "Chrome";
+    else if (/firefox|fxios/i.test(ua)) browser = "Firefox";
+    else if (/safari/i.test(ua) && !/chrome|crios/i.test(ua)) browser = "Safari";
+    else if (/opr|opera/i.test(ua)) browser = "Opera";
+    else browser = "Browser";
+
+    const isMobile = /mobile|android|iphone|ipad|ipod/i.test(ua);
+    const type = isMobile ? "موبائل" : "کمپیوٹر";
+    return `${type} (${os} - ${browser})`;
+  } catch {
+    return "کمپیوٹر / نامعلوم";
+  }
+}
+
+async function saveLog(action, detail = "", extra = {}) {
   if (!me?.id || !me?.username || !action) {
     throw new Error("لاگ اِن پروفائل میں یوزر آئی ڈی موجود نہیں؛ users پروفائل درست کریں۔");
   }
-  const row = { uid: me.id, username: me.username, action, detail, time: nowStr() };
+  const device = getDeviceInfo();
+  let province = extra.province || "";
+  let division = extra.division || "";
+  let district = extra.district || "";
+
+  if (!province && me.assignments && me.assignments.length) {
+    province = me.assignments.map(a => a.province).filter(Boolean).join("، ");
+    division = me.assignments.flatMap(a => a.divisions || []).filter(Boolean).join("، ");
+  }
+
+  const row = {
+    uid: me.id,
+    username: me.username,
+    action,
+    detail,
+    time: nowStr(),
+    province,
+    division,
+    district,
+    device
+  };
   const { error } = await supabase.from("logs").insert(row);
   if (error) throw error;
 }
@@ -524,13 +571,14 @@ function showApp(user, showTutorial = false) {
         fillScopeChecks();
       }, err => reportError("یوزرز لوڈ نہیں ہو سکے", err));
     supabase.from("logs")
-      .select("id, uid, username, action, detail, time, created_at")
+      .select("id, uid, username, action, detail, time, created_at, province, division, district, device")
       .order("created_at", { ascending: false })
       .limit(300)
       .then(({ data, error }) => {
         if (!me || me.id !== user.id) return;
         if (error) { reportError("سرگرمی لاگ لوڈ نہیں ہو سکا", error); return; }
         LOG = data || [];
+        fillLogFilters();
         if (!$("tab-log").classList.contains("hidden")) renderLog();
       }, err => reportError("سرگرمی لاگ لوڈ نہیں ہو سکا", err));
   } else {
@@ -591,6 +639,7 @@ function showApp(user, showTutorial = false) {
     channel.on("postgres_changes", { event: "INSERT", schema: "public", table: "logs" }, payload => {
       if (!me || me.id !== user.id || !payload.new) return;
       LOG = [payload.new, ...LOG].slice(0, 300);
+      fillLogFilters();
       if (!$("tab-log").classList.contains("hidden")) renderLog();
     });
   } else {
@@ -629,7 +678,7 @@ function resetLoginPassword() {
 }
 
 function resetAllFilters() {
-  ["fSearch", "fStatus", "rSearch", "rStatus", "reportUser", "uSearch", "uFilterRole", "uFilterProvince", "uFilterStatus"].forEach(id => {
+  ["fSearch", "fStatus", "rSearch", "rStatus", "reportUser", "uSearch", "uFilterRole", "uFilterProvince", "uFilterStatus", "logSearch", "logUser", "logProvince", "logDivision", "logDistrict", "logAction"].forEach(id => {
     if ($(id)) $(id).value = "";
   });
   Object.values(multiFilters).forEach(mf => mf.clear(true));
@@ -1586,7 +1635,11 @@ $("dataTable").addEventListener("click", async event => {
     const logDetail = isClearing
       ? `${row[K.code]} — انٹری خالی کر دی گئی`
       : `${row[K.code]} — حفظ: ${entry[K.hifz] || "-"}، ناظرہ: ${entry[K.nazra] || "-"}`;
-    saveLog(logAction, logDetail)
+    saveLog(logAction, logDetail, {
+      province: row[K.province] || "",
+      division: row[K.division] || "",
+      district: row[K.district] || ""
+    })
       .catch(error => reportError("کارروائی مکمل ہو گئی، مگر سرگرمی لاگ محفوظ نہیں ہوا", error));
   } catch (error) {
     setButtonBusy(button, false);
@@ -1939,7 +1992,7 @@ $("tabs").addEventListener("click", event => {
   ["entry", "report", "users", "log", "settings"].forEach(name => $("tab-" + name).classList.toggle("hidden", name !== tab));
   if (tab === "report") { fillReportFilters(); renderReport(); }
   if (tab === "users") renderUsers();
-  if (tab === "log") renderLog();
+  if (tab === "log") { fillLogFilters(); renderLog(); }
   if (tab === "settings") $("aName").value = me.username;
 });
 
@@ -2246,13 +2299,242 @@ $("userTable").addEventListener("click", async event => {
   }
 });
 
-function renderLog() {
-  const rows = LOG.slice(0, 300);
-  $("logTable").innerHTML = `<thead><tr><th>وقت</th><th>یوزر</th><th>عمل</th><th>تفصیل</th></tr></thead><tbody>` +
-    (rows.map(log => `<tr><td>${esc(log.time)}</td><td>${esc(log.username)}</td>
-      <td>${esc(log.action)}</td><td class="wrap">${esc(log.detail)}</td></tr>`).join("") ||
-      '<tr><td colspan="4" class="center">کوئی سرگرمی نہیں</td></tr>') + "</tbody>";
+function resolveLogInfo(log) {
+  let prov = log.province || "";
+  let div = log.division || "";
+  let dist = log.district || "";
+  let dev = log.device || "";
+
+  // 1. If entry action, try resolving from DATA by teacher code
+  if ((!prov || !div || !dist) && log.detail) {
+    const match = String(log.detail).match(/^([0-9]+\/[0-9]+)/);
+    const code = match ? match[1].trim() : String(log.detail).split(" — ")[0]?.trim();
+    if (code) {
+      const rec = DATA.find(r => r[K.code] === code);
+      if (rec) {
+        if (!prov) prov = rec[K.province] || "";
+        if (!div) div = rec[K.division] || "";
+        if (!dist) dist = rec[K.district] || "";
+      }
+    }
+  }
+
+  // 2. Try resolving from user's assigned scope if province still empty
+  if (!prov && (log.uid || log.username)) {
+    const u = USERS.find(user => (log.uid && user.id === log.uid) || (log.username && user.username === log.username));
+    if (u) {
+      if (u.role === "admin") {
+        prov = "مرکزی / ایڈمن";
+      } else if (u.assignments?.length) {
+        prov = u.assignments.map(a => a.province).filter(Boolean).join("، ");
+        div = u.assignments.flatMap(a => a.divisions || []).filter(Boolean).join("، ");
+      }
+    }
+  }
+
+  return {
+    province: prov,
+    division: div,
+    district: dist,
+    device: dev
+  };
 }
+
+function fillLogFilters() {
+  if (!me || me.role !== "admin") return;
+
+  const userSelect = $("logUser");
+  if (userSelect) {
+    const curVal = userSelect.value;
+    const userSet = new Set();
+    USERS.forEach(u => { if (u.username) userSet.add(u.username); });
+    LOG.forEach(l => { if (l.username) userSet.add(l.username); });
+    const userList = [...userSet].sort();
+    userSelect.innerHTML = `<option value="">تمام یوزرز</option>` +
+      userList.map(u => `<option value="${esc(u)}">${esc(u)}</option>`).join("");
+    if (userList.includes(curVal)) userSelect.value = curVal;
+  }
+
+  const provSelect = $("logProvince");
+  if (provSelect) {
+    const curVal = provSelect.value;
+    const provSet = new Set(provinces);
+    LOG.forEach(l => {
+      const info = resolveLogInfo(l);
+      if (info.province && !info.province.includes("،")) provSet.add(info.province);
+    });
+    const provList = [...provSet].filter(Boolean).sort();
+    provSelect.innerHTML = `<option value="">تمام صوبے</option>` +
+      provList.map(p => `<option value="${esc(p)}">${esc(p)}</option>`).join("");
+    if (provList.includes(curVal)) provSelect.value = curVal;
+  }
+
+  cascadeLogDivisionsAndDistricts();
+
+  const actSelect = $("logAction");
+  if (actSelect) {
+    const curVal = actSelect.value;
+    const actSet = new Set();
+    LOG.forEach(l => { if (l.action) actSet.add(l.action); });
+    const actList = [...actSet].sort();
+    actSelect.innerHTML = `<option value="">تمام اعمال</option>` +
+      actList.map(a => `<option value="${esc(a)}">${esc(a)}</option>`).join("");
+    if (actList.includes(curVal)) actSelect.value = curVal;
+  }
+}
+
+function cascadeLogDivisionsAndDistricts() {
+  const prov = $("logProvince")?.value || "";
+  const divSelect = $("logDivision");
+  const distSelect = $("logDistrict");
+
+  let relevantRows = DATA;
+  if (prov) {
+    relevantRows = relevantRows.filter(r => nfc(r[K.province]) === nfc(prov));
+  }
+
+  if (divSelect) {
+    const curDiv = divSelect.value;
+    let divs = [...new Set(relevantRows.map(r => r[K.division]).filter(Boolean))].sort();
+    divSelect.innerHTML = `<option value="">تمام ڈویژنز</option>` +
+      divs.map(d => `<option value="${esc(d)}">${esc(d)}</option>`).join("");
+    if (divs.includes(curDiv)) divSelect.value = curDiv;
+  }
+
+  if (distSelect) {
+    const curDist = distSelect.value;
+    const curDiv = divSelect?.value || "";
+    let distRows = relevantRows;
+    if (curDiv) {
+      distRows = distRows.filter(r => nfc(r[K.division]) === nfc(curDiv));
+    }
+    let dists = [...new Set(distRows.map(r => r[K.district]).filter(Boolean))].sort();
+    distSelect.innerHTML = `<option value="">تمام ڈسٹرکٹ</option>` +
+      dists.map(d => `<option value="${esc(d)}">${esc(d)}</option>`).join("");
+    if (dists.includes(curDist)) distSelect.value = curDist;
+  }
+}
+
+async function refreshLogs() {
+  const btn = $("logRefreshBtn");
+  if (btn) setButtonBusy(btn, true, "لوڈ ہو رہا ہے...");
+  try {
+    const { data, error } = await supabase.from("logs")
+      .select("id, uid, username, action, detail, time, created_at, province, division, district, device")
+      .order("created_at", { ascending: false })
+      .limit(300);
+    if (error) throw error;
+    LOG = data || [];
+    fillLogFilters();
+    renderLog();
+  } catch (err) {
+    reportError("سرگرمی لاگ تازہ نہیں ہو سکا", err);
+  } finally {
+    if (btn) setButtonBusy(btn, false);
+  }
+}
+
+function renderLog() {
+  if (!me || me.role !== "admin") return;
+  const userFilter = $("logUser")?.value || "";
+  const provFilter = $("logProvince")?.value || "";
+  const divFilter = $("logDivision")?.value || "";
+  const distFilter = $("logDistrict")?.value || "";
+  const actFilter = $("logAction")?.value || "";
+  const search = ($("logSearch")?.value || "").trim().toLowerCase();
+
+  const allRows = LOG.slice(0, 300);
+  const filtered = allRows.filter(log => {
+    const info = resolveLogInfo(log);
+
+    if (userFilter && log.username !== userFilter) return false;
+    if (provFilter && !info.province.includes(provFilter)) return false;
+    if (divFilter && !info.division.includes(divFilter)) return false;
+    if (distFilter && !info.district.includes(distFilter)) return false;
+    if (actFilter && log.action !== actFilter) return false;
+
+    if (search) {
+      const haystack = [
+        log.time,
+        log.username,
+        log.action,
+        log.detail,
+        info.province,
+        info.division,
+        info.district,
+        info.device
+      ].join(" ").toLowerCase();
+      if (!haystack.includes(search)) return false;
+    }
+    return true;
+  });
+
+  if ($("logSummary")) {
+    $("logSummary").innerHTML = `<div><b>${allRows.length}</b>کل سرگرمیاں</div>` +
+      `<div><b>${filtered.length}</b>دکھائی جا رہی ہیں</div>`;
+  }
+
+  $("logTable").innerHTML = `<thead><tr>
+      <th>وقت</th>
+      <th>یوزر</th>
+      <th>صوبہ</th>
+      <th>ڈویژن</th>
+      <th>ڈسٹرکٹ</th>
+      <th>ڈیوائس</th>
+      <th>عمل</th>
+      <th>تفصیل</th>
+    </tr></thead><tbody>` +
+    (filtered.map(log => {
+      const info = resolveLogInfo(log);
+      return `<tr>
+        <td style="white-space:nowrap">${esc(log.time)}</td>
+        <td><b>${esc(log.username)}</b></td>
+        <td>${esc(info.province || "-")}</td>
+        <td>${esc(info.division || "-")}</td>
+        <td>${esc(info.district || "-")}</td>
+        <td style="white-space:nowrap;font-size:12.5px;color:#555">${esc(info.device || "-")}</td>
+        <td><b>${esc(log.action)}</b></td>
+        <td class="wrap">${esc(log.detail || "-")}</td>
+      </tr>`;
+    }).join("") || '<tr><td colspan="8" class="center">کوئی سرگرمی نہیں ملی</td></tr>') +
+    "</tbody>";
+}
+
+["logUser", "logDistrict", "logAction"].forEach(id => {
+  $(id)?.addEventListener("change", () => renderLog());
+});
+$("logSearch")?.addEventListener("input", () => renderLog());
+$("logProvince")?.addEventListener("change", () => {
+  cascadeLogDivisionsAndDistricts();
+  renderLog();
+});
+$("logDivision")?.addEventListener("change", () => {
+  const distSelect = $("logDistrict");
+  if (distSelect) {
+    const curDist = distSelect.value;
+    const prov = $("logProvince")?.value || "";
+    const curDiv = $("logDivision")?.value || "";
+    let distRows = DATA;
+    if (prov) distRows = distRows.filter(r => nfc(r[K.province]) === nfc(prov));
+    if (curDiv) distRows = distRows.filter(r => nfc(r[K.division]) === nfc(curDiv));
+    let dists = [...new Set(distRows.map(r => r[K.district]).filter(Boolean))].sort();
+    distSelect.innerHTML = `<option value="">تمام ڈسٹرکٹ</option>` +
+      dists.map(d => `<option value="${esc(d)}">${esc(d)}</option>`).join("");
+    if (dists.includes(curDist)) distSelect.value = curDist;
+  }
+  renderLog();
+});
+$("logClearFiltersBtn")?.addEventListener("click", () => {
+  if ($("logSearch")) $("logSearch").value = "";
+  if ($("logUser")) $("logUser").value = "";
+  if ($("logProvince")) $("logProvince").value = "";
+  if ($("logDivision")) $("logDivision").value = "";
+  if ($("logDistrict")) $("logDistrict").value = "";
+  if ($("logAction")) $("logAction").value = "";
+  cascadeLogDivisionsAndDistricts();
+  renderLog();
+});
+$("logRefreshBtn")?.addEventListener("click", refreshLogs);
 
 $("adminForm").addEventListener("submit", async event => {
   event.preventDefault();

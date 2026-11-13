@@ -66,7 +66,11 @@ create table if not exists public.logs (
   action text not null check (char_length(action) <= 100),
   detail text not null default '' check (char_length(detail) <= 500),
   time text not null default '',
-  created_at timestamptz not null default now()
+  created_at timestamptz not null default now(),
+  province text not null default '',
+  division text not null default '',
+  district text not null default '',
+  device text not null default ''
 );
 
 create index if not exists idx_logs_uid on public.logs (uid);
@@ -316,7 +320,20 @@ drop function if exists public.is_active_user();
 drop function if exists public.is_admin();
 drop function if exists public.user_matches_record(jsonb, text, text);
 
--- Realtime sync for live entry/user/log updates
-alter publication supabase_realtime add table public.users, public.entries, public.logs;
+-- Realtime sync for live entry/user/log updates (idempotent: checks before adding)
+do $$
+declare
+  tbl text;
+begin
+  for tbl in select unnest(array['users', 'entries', 'logs']) loop
+    if not exists (
+      select 1 from pg_publication_tables
+      where pubname = 'supabase_realtime' and schemaname = 'public' and tablename = tbl
+    ) then
+      execute format('alter publication supabase_realtime add table public.%I', tbl);
+    end if;
+  end loop;
+end $$;
+
 alter table public.users replica identity full;
 alter table public.entries replica identity full;

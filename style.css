@@ -109,7 +109,7 @@ input:focus, select:focus { outline: 2px solid var(--main); outline-offset: -1px
   height: 34px;
   min-width: 0;
 }
-.filter-bar #fSearch, .filter-bar #rSearch { flex: 0 1 165px; width: 165px; min-width: 120px; }
+.filter-bar #fSearch, .filter-bar #rSearch, .filter-bar #logSearch { flex: 0 1 165px; width: 165px; min-width: 120px; }
 .filter-bar .entry-owner { font-size: 14px; white-space: nowrap; flex-shrink: 0; }
 .filter-bar .entry-owner select { min-width: 105px; max-width: 145px; }
 .filter-bar #fStatus, .filter-bar #rStatus { width: auto; flex-shrink: 0; }
