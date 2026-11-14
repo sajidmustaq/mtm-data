@@ -1341,7 +1341,7 @@ function parseEnGbMs(str) {
   return m ? Date.UTC(+m[3], +m[2] - 1, +m[1], +m[4], +m[5], +m[6]) : 0;
 }
 
-function getEntryFilteredRows(excludeColKey = null) {
+function getEntryFilteredRows(excludeColKey = null, ignoreStatus = false) {
   const search = $("fSearch").value.trim().toLowerCase();
   const isAdmin = me?.role === "admin";
   const ownerId = entryOwnerId();
@@ -1358,10 +1358,13 @@ function getEntryFilteredRows(excludeColKey = null) {
   return visibleRows().filter(row => {
     if (!matchesRowFilters(row, filterCriteria)) return false;
     const entry = entryFor(row, ownerId);
-    if (status === "done" && !isDone(entry)) return false;
-    if (status === "pending" && isDone(entry)) return false;
+    if (!ignoreStatus) {
+      if (status === "done" && !isDone(entry)) return false;
+      if (status === "pending" && isDone(entry)) return false;
+    }
     for (const [colKey, allowed] of tableColFilters.entries()) {
       if (colKey === excludeColKey) continue;
+      if (ignoreStatus && (colKey === "action" || colKey === "hifz" || colKey === "nazra")) continue;
       const def = TABLE_COL_DEFS[colKey];
       if (!def) continue;
       const raw = String(def.get(row, ownerId) || "");
@@ -1370,6 +1373,10 @@ function getEntryFilteredRows(excludeColKey = null) {
     }
     return true;
   });
+}
+
+function getEntrySummaryRows() {
+  return getEntryFilteredRows(null, true);
 }
 
 function filteredRows() {
@@ -1436,7 +1443,8 @@ function showConfirmModal({ icon = "⚠️", title = "تصدیقِ اندراج"
 function renderTable() {
   if (!me) return;
   const rows = filteredRows();
-  renderMini(rows);
+  const summaryRows = getEntrySummaryRows();
+  renderMini(summaryRows);
   updateTableFilterHeaders();
   const pages = Math.max(1, Math.ceil(rows.length / PAGE_SIZE));
   if (page > pages) page = pages;
@@ -1461,7 +1469,7 @@ function renderTable() {
     }
     return `<tr class="${isDone(saved) ? "done" : "pending"}">
       <td>${(page - 1) * PAGE_SIZE + i + 1}</td>
-      <td>${esc(row[K.code])}</td><td>${esc(row[K.name])}</td><td>${esc(row[K.father])}</td>
+      <td>${esc(row[K.code])}</td><td title="${esc(row[K.name])}">${esc(row[K.name])}</td><td>${esc(row[K.father])}</td>
       ${isAdmin ? `<td>${esc(row[K.branch])}</td>` : ""}<td>${esc(row[K.duty])}</td><td>${esc(row[K.district])}</td>
       <td>${esc(row[K.division])}</td>${isAdmin ? `<td>${esc(row[K.province])}</td>` : ""}
       ${isAdmin ? `<td>${esc(row[K.offMin])}</td><td>${esc(row[K.grade])}</td><td>${esc(row[K.ijaraMin])}</td>` : ""}
@@ -1470,18 +1478,23 @@ function renderTable() {
       <td>${actionCell}</td>
     </tr>`;
   }).join("") || `<tr><td colspan="${isAdmin ? 15 : 10}" class="center">کوئی ریکارڈ نہیں ملا</td></tr>`;
+  const countLabel = rows.length !== summaryRows.length
+    ? `فلٹر شدہ: ${rows.length} / کل ${summaryRows.length}`
+    : `کل ${rows.length}`;
   $("pager").innerHTML = `<button id="pPrev" ${page <= 1 ? "disabled" : ""}>پچھلا</button>
-    <span>صفحہ ${page} / ${pages} &nbsp;(کل ${rows.length})</span>
+    <span>صفحہ ${page} / ${pages} &nbsp;(${countLabel})</span>
     <button id="pNext" ${page >= pages ? "disabled" : ""}>اگلا</button>`;
   $("pPrev").onclick = () => { page--; renderTable(); };
   $("pNext").onclick = () => { page++; renderTable(); };
 }
 
-function renderMini(rows = filteredRows()) {
+function renderMini(summaryRows = getEntrySummaryRows()) {
   const ownerId = entryOwnerId();
-  const done = rows.filter(row => isDone(entryFor(row, ownerId))).length;
-  $("miniSummary").innerHTML = `<div><b>${rows.length}</b>کل مدرسین</div>
-    <div><b>${done}</b>انٹری مکمل</div><div class="rem"><b>${rows.length - done}</b>باقی</div>`;
+  const total = summaryRows.length;
+  const done = summaryRows.filter(row => isDone(entryFor(row, ownerId))).length;
+  const remaining = total - done;
+  $("miniSummary").innerHTML = `<div><b>${total}</b>کل مدرسین</div>
+    <div><b>${done}</b>انٹری مکمل</div><div class="rem"><b>${remaining}</b>باقی</div>`;
 }
 
 function refreshAll() {
@@ -1910,6 +1923,20 @@ function reportCompletedSet(ownerId = $("reportUser")?.value || "") {
   );
 }
 
+function reportBaseFilteredRows() {
+  const search = ($("rSearch")?.value || "").trim().toLowerCase();
+  const filterCriteria = {
+    selProvs: reportMultiFilters.province.getSelected(),
+    selDivs: reportMultiFilters.division.getSelected(),
+    selDists: reportMultiFilters.district.getSelected(),
+    selBranches: reportMultiFilters.branch.getSelected(),
+    selDuties: reportMultiFilters.duty.getSelected(),
+    search,
+    includeBranchSearch: true
+  };
+  return reportBaseRows().filter(row => matchesRowFilters(row, filterCriteria));
+}
+
 function reportFilteredRows(completedRecords) {
   const search = ($("rSearch")?.value || "").trim().toLowerCase();
   const status = $("rStatus")?.value || "";
@@ -1965,6 +1992,7 @@ function renderGroupedReport(field, table, label, reportRows, completedRecords) 
 function renderReport() {
   const ownerId = $("reportUser").value;
   const completedRecords = reportCompletedSet(ownerId);
+  const baseRows = reportBaseFilteredRows();
   const reportRows = reportFilteredRows(completedRecords);
   const groups = new Map();
   reportRows.forEach(row => {
@@ -1979,11 +2007,13 @@ function renderReport() {
     total += group.total; done += group.done;
     return reportRow(province, group);
   }).join("");
-  const remaining = total - done;
-  const percent = total ? Math.round(done * 100 / total) : 0;
+  const sumTotal = baseRows.length;
+  const sumDone = baseRows.filter(row => completedRecords.has(row.id)).length;
+  const remaining = sumTotal - sumDone;
+  const percent = sumTotal ? Math.round(sumDone * 100 / sumTotal) : 0;
   if ($("reportSummary")) {
-    $("reportSummary").innerHTML = `<div><b>${total}</b>کل ریکارڈ</div>
-      <div><b>${done}</b>انٹری مکمل</div><div class="rem"><b>${remaining}</b>باقی</div>
+    $("reportSummary").innerHTML = `<div><b>${sumTotal}</b>کل ریکارڈ</div>
+      <div><b>${sumDone}</b>انٹری مکمل</div><div class="rem"><b>${remaining}</b>باقی</div>
       <div><b>${percent}%</b>پیش رفت</div>`;
   }
   $("repProvince").innerHTML = `<thead><tr><th>صوبہ</th><th>کل انٹریاں</th><th>مکمل</th><th>باقی</th><th>پیش رفت</th></tr></thead>

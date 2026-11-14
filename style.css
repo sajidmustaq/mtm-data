@@ -215,14 +215,122 @@ th {
   border-bottom: 2px solid #9ab6a7;
   border-left-color: #c5d4cb;
 }
-#dataTable thead th:first-child { background: #d2e0d8; text-align: center; }
-#dataTable tbody td:first-child {
+/* اسٹکی کالمز برائے #، عملہ کوڈ اور نام */
+#dataTable {
+  --w-col1: 38px;
+  --w-col2: 74px;
+  --w-col1-2: calc(var(--w-col1) + var(--w-col2));
+  --w-col3: 118px;
+}
+
+/* کالم ۱: قطار نمبر (#) */
+#dataTable thead th:nth-child(1) {
+  position: sticky;
+  top: 0;
+  right: 0;
+  z-index: 6;
+  width: var(--w-col1);
+  min-width: var(--w-col1);
+  max-width: var(--w-col1);
+  background: #d2e0d8;
+  text-align: center;
+  box-sizing: border-box;
+}
+#dataTable tbody td:nth-child(1):not([colspan]) {
+  position: sticky;
+  right: 0;
+  z-index: 3;
+  width: var(--w-col1);
+  min-width: var(--w-col1);
+  max-width: var(--w-col1);
   background: #f3f6f4;
   color: #555;
   text-align: center;
   font-weight: 600;
-  min-width: 42px;
   border-left: 1px solid #cdd7d0;
+  box-sizing: border-box;
+}
+#dataTable tbody tr:nth-child(even) td:nth-child(1):not([colspan]) {
+  background: #eef2ef;
+}
+#dataTable tbody tr:hover td:nth-child(1):not([colspan]) {
+  background: #e0ece4 !important;
+}
+
+/* کالم ۲: عملہ کوڈ */
+#dataTable thead th:nth-child(2) {
+  position: sticky;
+  top: 0;
+  right: var(--w-col1);
+  z-index: 6;
+  width: var(--w-col2);
+  min-width: var(--w-col2);
+  max-width: var(--w-col2);
+  background: linear-gradient(180deg, #ebf2ee 0%, #dce8e1 100%);
+  text-align: center;
+  box-sizing: border-box;
+}
+#dataTable thead th:nth-child(2).col-filtered {
+  background: linear-gradient(180deg, #dff0e7 0%, #cce3d6 100%);
+}
+#dataTable tbody td:nth-child(2) {
+  position: sticky;
+  right: var(--w-col1);
+  z-index: 3;
+  width: var(--w-col2);
+  min-width: var(--w-col2);
+  max-width: var(--w-col2);
+  background: #ffffff;
+  color: #333;
+  text-align: center;
+  font-weight: 600;
+  box-sizing: border-box;
+  border-left: 1px solid #e6ebe5;
+  unicode-bidi: isolate;
+}
+#dataTable tbody tr:nth-child(even) td:nth-child(2) {
+  background: #f9fbfa;
+}
+#dataTable tbody tr:hover td:nth-child(2) {
+  background: #eaf3ee !important;
+}
+
+/* کالم ۳: نام */
+#dataTable thead th:nth-child(3) {
+  position: sticky;
+  top: 0;
+  right: var(--w-col1-2);
+  z-index: 6;
+  min-width: var(--w-col3);
+  max-width: 145px;
+  background: linear-gradient(180deg, #ebf2ee 0%, #dce8e1 100%);
+  border-left: 2px solid #9ab6a7;
+  box-shadow: -3px 0 6px rgba(0, 0, 0, 0.08);
+  box-sizing: border-box;
+}
+#dataTable thead th:nth-child(3).col-filtered {
+  background: linear-gradient(180deg, #dff0e7 0%, #cce3d6 100%);
+}
+#dataTable tbody td:nth-child(3) {
+  position: sticky;
+  right: var(--w-col1-2);
+  z-index: 3;
+  min-width: var(--w-col3);
+  max-width: 145px;
+  background: #ffffff;
+  font-weight: 600;
+  border-left: 2px solid #9ab6a7;
+  box-shadow: -3px 0 6px rgba(0, 0, 0, 0.08);
+  box-sizing: border-box;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+#dataTable tbody tr:nth-child(even) td:nth-child(3) {
+  background: #f9fbfa;
+}
+#dataTable tbody tr:hover td:nth-child(3) {
+  background: #eaf3ee !important;
 }
 tbody tr:nth-child(even) td { background: #f9fbfa; }
 tbody tr:hover td { background: #eaf3ee !important; }
@@ -1184,25 +1292,35 @@ dialog.custom-alert-dlg[data-variant="success"] .custom-alert-badge {
     position: relative;
   }
 
-  /* Sticky Row Number (#) Column in RTL */
-  #dataTable thead th:first-child {
-    position: sticky;
-    right: 0;
-    z-index: 4;
-    box-shadow: -2px 0 5px rgba(0, 0, 0, 0.07);
+  /* Sticky First 3 Columns (#, Code, Name) on Mobile */
+  #dataTable {
+    --w-col1: 34px;
+    --w-col2: 68px;
+    --w-col1-2: 102px;
+    --w-col3: 98px;
   }
-  #dataTable tbody td:first-child {
-    position: sticky;
-    right: 0;
-    z-index: 2;
-    background: #f3f6f4;
-    box-shadow: -2px 0 5px rgba(0, 0, 0, 0.07);
+  #dataTable thead th:nth-child(1),
+  #dataTable tbody td:nth-child(1):not([colspan]) {
+    padding: 6px 1px;
+    font-size: 12px;
   }
-  tbody tr:nth-child(even) td:first-child {
-    background: #eef2ef;
+  #dataTable thead th:nth-child(2),
+  #dataTable tbody td:nth-child(2) {
+    padding: 6px 2px;
+    font-size: 12.5px;
   }
-  tbody tr:hover td:first-child {
-    background: #e0ece4 !important;
+  #dataTable thead th:nth-child(2) .th-excel {
+    gap: 2px;
+  }
+  #dataTable thead th:nth-child(2) .th-filter-btn {
+    width: 18px;
+    height: 18px;
+  }
+  #dataTable thead th:nth-child(3),
+  #dataTable tbody td:nth-child(3) {
+    padding: 6px 6px;
+    font-size: 13.5px;
+    max-width: 108px;
   }
 
   /* Touch-optimized Table Cells */
