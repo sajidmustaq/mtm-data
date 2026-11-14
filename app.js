@@ -856,12 +856,14 @@ function createMultiFilter(containerId, allLabel, pluralLabel, onChange) {
     <div class="ms-menu hidden">
       <div class="ms-top"><input type="text" class="ms-search" placeholder="تلاش..."><button type="button" class="ms-clear">صاف</button></div>
       <div class="ms-list"></div>
+      <div class="ms-bottom"><button type="button" class="btn ms-done-btn">ٹھیک ہے</button></div>
     </div>`;
   const btn = wrap.querySelector(".ms-btn");
   const textEl = wrap.querySelector(".ms-text");
   const menu = wrap.querySelector(".ms-menu");
   const searchEl = wrap.querySelector(".ms-search");
   const clearBtn = wrap.querySelector(".ms-clear");
+  const doneBtn = wrap.querySelector(".ms-done-btn");
   const listEl = wrap.querySelector(".ms-list");
   const selected = new Set();
   let options = [];
@@ -900,18 +902,21 @@ function createMultiFilter(containerId, allLabel, pluralLabel, onChange) {
     document.querySelectorAll(".ms-menu").forEach(m => m.classList.add("hidden"));
     if (wasHidden) {
       menu.classList.remove("hidden");
-      menu.style.right = "0";
-      menu.style.left = "auto";
-      if (menu.getBoundingClientRect().left < 8) {
-        menu.style.right = "auto";
-        menu.style.left = "0";
+      if (window.innerWidth > 540) {
+        menu.style.right = "0";
+        menu.style.left = "auto";
+        if (menu.getBoundingClientRect().left < 8) {
+          menu.style.right = "auto";
+          menu.style.left = "0";
+        }
       }
-      if (options.length > 8) searchEl.focus();
+      if (window.innerWidth > 768 && options.length > 8) searchEl.focus();
     }
   });
 
   menu.addEventListener("click", event => event.stopPropagation());
   searchEl.addEventListener("input", applySearch);
+  doneBtn?.addEventListener("click", () => menu.classList.add("hidden"));
   listEl.addEventListener("change", event => {
     const cb = event.target;
     if (cb.type !== "checkbox") return;
@@ -1214,7 +1219,9 @@ function openExcelFilterMenu(colKey, btn) {
   if (left < 8) left = 8;
   menu.style.top = `${top}px`;
   menu.style.left = `${left}px`;
-  searchInput.focus();
+  if (window.innerWidth > 768) {
+    searchInput.focus();
+  }
 }
 
 function initTableExcelFilters() {

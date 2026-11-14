@@ -11,18 +11,21 @@
 body {
   margin: 0;
   min-height: 100vh;
+  min-height: 100dvh;
   display: flex;
   flex-direction: column;
   font-family: "Noto Naskh Arabic", "Jameel Noori Nastaleeq", Tahoma, serif;
   background: var(--bg);
   color: var(--text);
   font-size: 16px;
+  overflow-x: hidden;
+  -webkit-tap-highlight-color: transparent;
 }
 .hidden { display: none !important; }
 
 /* لاگ اِن */
 .login-wrap { flex: 1; display: flex; align-items: center; justify-content: center; padding: 24px 12px; }
-.login-box { background: #fff; width: 340px; padding: 28px; border: 1px solid var(--line); }
+.login-box { background: #fff; width: 340px; max-width: 100%; padding: 28px; border: 1px solid var(--line); border-radius: 8px; }
 .login-box h1 { margin: 0 0 18px; font-size: 22px; color: var(--main); text-align: center; }
 .login-brand { display: flex; align-items: center; justify-content: center; gap: 10px; }
 .brand-logo { display: block; border-radius: 7px; flex-shrink: 0; }
@@ -173,6 +176,8 @@ input:focus, select:focus { outline: 2px solid var(--main); outline-offset: -1px
 .ms-opt:hover { background: #eef3f0; }
 .ms-opt input { width: auto; margin: 0; flex-shrink: 0; }
 .ms-empty { padding: 8px; text-align: center; color: #777; font-size: 13px; }
+.ms-bottom { display: none; margin-top: 6px; padding-top: 6px; border-top: 1px solid #edf1ee; }
+.ms-done-btn { width: 100%; padding: 6px 12px; font-size: 13px; border-radius: 4px; }
 
 @media (max-width: 1100px) {
   .filter-bar { flex-wrap: wrap; }
@@ -186,6 +191,8 @@ input:focus, select:focus { outline: 2px solid var(--main); outline-offset: -1px
   border: 1px solid #c3ccc5;
   border-radius: 6px;
   box-shadow: 0 2px 10px rgba(0, 0, 0, .05);
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior: contain;
 }
 table { border-collapse: separate; border-spacing: 0; width: 100%; font-size: 14.5px; }
 th, td {
@@ -917,8 +924,579 @@ dialog.custom-alert-dlg[data-variant="success"] .custom-alert-badge {
   color: #b7791f;
 }
 
-@media (max-width: 700px) {
-  .topbar { flex-direction: column; gap: 6px; }
-  #fSearch, #rSearch { min-width: 100%; }
-  .app-footer { justify-content: center; text-align: center; padding: 12px 14px; }
+/* ==========================================================================
+   MOBILE & RESPONSIVE DESIGN SYSTEM
+   ========================================================================== */
+
+/* Tablet & Medium Screens (<= 1024px) */
+@media (max-width: 1024px) {
+  .filter-bar {
+    flex-wrap: wrap;
+    gap: 6px;
+  }
+  .filter-bar #fSearch,
+  .filter-bar #rSearch,
+  .filter-bar #logSearch {
+    flex: 1 1 200px;
+    width: auto;
+  }
+}
+
+/* Mobile & Tablet Portrait (<= 768px) */
+@media (max-width: 768px) {
+  /* Layout & Spacing */
+  body {
+    font-size: 15px;
+  }
+  
+  main {
+    padding: 8px 10px 14px;
+    padding-left: max(10px, env(safe-area-inset-left));
+    padding-right: max(10px, env(safe-area-inset-right));
+  }
+  
+  h2 {
+    font-size: 16px;
+    margin: 16px 0 8px;
+  }
+
+  /* Compact Native-style Mobile Topbar */
+  .topbar {
+    padding: 8px 12px;
+    padding-top: max(8px, env(safe-area-inset-top));
+    padding-left: max(12px, env(safe-area-inset-left));
+    padding-right: max(12px, env(safe-area-inset-right));
+    display: flex;
+    flex-direction: row;
+    justify-content: space-between;
+    align-items: center;
+    gap: 8px;
+  }
+  .topbar .title {
+    font-size: 16px;
+    gap: 7px;
+  }
+  .topbar .brand-logo {
+    width: 26px;
+    height: 26px;
+  }
+  .who {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 13px;
+  }
+  #whoLabel {
+    display: inline-block;
+    max-width: 120px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    background: rgba(255, 255, 255, 0.16);
+    padding: 3px 8px;
+    border-radius: 5px;
+    font-size: 12.5px;
+    vertical-align: middle;
+  }
+  .topbar .btn-light {
+    padding: 5px 10px;
+    font-size: 12.5px;
+    border-radius: 5px;
+    min-height: 32px;
+  }
+
+  /* Smooth Touch Tabs Navigation */
+  .tabs {
+    padding: 0 6px;
+    gap: 2px;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+    background: #fff;
+  }
+  .tabs::-webkit-scrollbar {
+    display: none;
+  }
+  .tabs button {
+    padding: 10px 14px;
+    font-size: 14px;
+    flex-shrink: 0;
+  }
+
+  /* Summary Metrics Cards Grid */
+  .entry-top {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 8px;
+    margin-bottom: 8px;
+  }
+  .summary {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(80px, 1fr));
+    gap: 6px;
+    width: 100%;
+  }
+  .summary div {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+    padding: 7px 4px;
+    border-radius: 7px;
+    font-size: 12.5px;
+    background: #fff;
+    border: 1px solid var(--line);
+  }
+  .summary b {
+    font-size: 17px;
+    line-height: 1.2;
+    margin: 0 0 2px 0;
+  }
+
+  /* Action Buttons Grid */
+  .entry-actions {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(95px, 1fr));
+    gap: 5px;
+    width: 100%;
+  }
+  .entry-actions .btn,
+  .entry-actions .btn-light {
+    width: 100%;
+    min-height: 36px;
+    padding: 6px 8px;
+    font-size: 13px;
+    border-radius: 6px;
+    white-space: nowrap;
+    text-align: center;
+    box-sizing: border-box;
+    margin: 0;
+  }
+
+  /* Responsive Filter Bars */
+  .filter-bar {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin-bottom: 8px;
+    width: 100%;
+  }
+  .filter-bar #fSearch,
+  .filter-bar #rSearch,
+  .filter-bar #logSearch {
+    flex: 1 1 100% !important;
+    width: 100% !important;
+    min-width: 100% !important;
+    height: 38px;
+    font-size: 14.5px;
+    border-radius: 6px;
+  }
+  .filter-bar .ms-wrap {
+    flex: 1 1 calc(50% - 4px);
+    min-width: calc(50% - 4px);
+  }
+  .filter-bar .ms-btn {
+    width: 100%;
+    max-width: 100%;
+    height: 38px;
+    font-size: 13.5px;
+    border-radius: 6px;
+    padding: 5px 9px;
+  }
+  .filter-bar .entry-owner {
+    flex: 1 1 calc(50% - 4px);
+    min-width: calc(50% - 4px);
+    display: flex;
+  }
+  .filter-bar .entry-owner select {
+    width: 100%;
+    min-width: 0;
+    max-width: 100%;
+    height: 38px;
+    font-size: 13.5px;
+    border-radius: 6px;
+    padding: 5px 9px;
+  }
+  .filter-bar #fStatus,
+  .filter-bar #rStatus {
+    flex: 1 1 calc(50% - 4px);
+    min-width: calc(50% - 4px);
+    width: 100%;
+    height: 38px;
+    font-size: 13.5px;
+    border-radius: 6px;
+  }
+
+  /* Activity Log Filter Bar */
+  #tab-log .filter-bar select {
+    flex: 1 1 calc(50% - 4px);
+    min-width: calc(50% - 4px);
+    height: 38px;
+    font-size: 13.5px;
+    border-radius: 6px;
+  }
+
+  /* Users Tab Toolbar */
+  #tab-users .toolbar {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    align-items: center;
+  }
+  #tab-users .toolbar h2 {
+    margin: 0;
+    font-size: 17px;
+  }
+  #tab-users .toolbar .spacer {
+    display: none;
+  }
+  #tab-users .toolbar #addUserBtn {
+    margin-right: auto;
+    padding: 6px 14px;
+    min-height: 36px;
+    border-radius: 6px;
+    font-size: 13.5px;
+  }
+  #tab-users .toolbar #uSearch {
+    flex: 1 1 100% !important;
+    width: 100% !important;
+    min-width: 100% !important;
+    height: 38px;
+    font-size: 14.5px;
+    border-radius: 6px;
+  }
+  #tab-users .toolbar select {
+    flex: 1 1 calc(33.333% - 4px);
+    min-width: 0;
+    height: 38px;
+    font-size: 13.5px;
+    border-radius: 6px;
+  }
+
+  /* Mobile Responsive Table Wrap */
+  .table-wrap {
+    max-height: calc(100vh - 240px);
+    min-height: 220px;
+    border-radius: 8px;
+    -webkit-overflow-scrolling: touch;
+    overscroll-behavior: contain;
+    position: relative;
+  }
+
+  /* Sticky Row Number (#) Column in RTL */
+  #dataTable thead th:first-child {
+    position: sticky;
+    right: 0;
+    z-index: 4;
+    box-shadow: -2px 0 5px rgba(0, 0, 0, 0.07);
+  }
+  #dataTable tbody td:first-child {
+    position: sticky;
+    right: 0;
+    z-index: 2;
+    background: #f3f6f4;
+    box-shadow: -2px 0 5px rgba(0, 0, 0, 0.07);
+  }
+  tbody tr:nth-child(even) td:first-child {
+    background: #eef2ef;
+  }
+  tbody tr:hover td:first-child {
+    background: #e0ece4 !important;
+  }
+
+  /* Touch-optimized Table Cells */
+  th, td {
+    padding: 7px 8px;
+    font-size: 13.5px;
+  }
+  th {
+    padding: 8px 8px;
+    font-size: 13px;
+  }
+  
+  /* Touch-friendly Form Controls in Table */
+  td select {
+    min-width: 105px;
+    height: 38px;
+    font-size: 13.5px;
+    padding: 5px 8px 5px 24px;
+    border-radius: 6px;
+  }
+  
+  .row-submit-btn {
+    min-height: 36px;
+    min-width: 70px;
+    font-size: 13px;
+    padding: 5px 12px;
+    border-radius: 6px;
+  }
+
+  .th-filter-btn {
+    width: 24px;
+    height: 24px;
+  }
+
+  /* Progress bar in reports */
+  .bar {
+    width: 60px;
+    height: 8px;
+    margin-right: 4px;
+  }
+
+  /* Touch-Friendly Pagination */
+  .pager {
+    gap: 8px;
+    padding: 8px 0;
+    margin-top: 10px;
+  }
+  .pager button {
+    min-height: 38px;
+    padding: 6px 16px;
+    font-size: 14px;
+    font-weight: 600;
+    border-radius: 6px;
+  }
+  .pager span {
+    font-size: 13px;
+  }
+
+  /* Touch-Friendly Dialogs & Modals */
+  dialog {
+    width: min(94vw, 440px);
+    max-height: 90vh;
+    padding: 16px 14px;
+    border-radius: 12px;
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+    box-shadow: 0 16px 45px rgba(0, 0, 0, 0.25);
+  }
+  dialog h3 {
+    font-size: 18px;
+    margin-bottom: 10px;
+  }
+  dialog input[type=text],
+  dialog input[type=password],
+  dialog select {
+    height: 40px;
+    font-size: 14.5px;
+    border-radius: 6px;
+  }
+  .dlg-actions {
+    display: flex;
+    gap: 8px;
+    margin-top: 14px;
+  }
+  .dlg-actions button {
+    flex: 1;
+    min-height: 42px;
+    font-size: 14.5px;
+    border-radius: 6px;
+  }
+  dialog.confirm-dlg {
+    padding: 18px 16px;
+    border-radius: 12px;
+  }
+  .confirm-head h3 {
+    font-size: 18px;
+  }
+  .confirm-msg {
+    padding: 10px 12px;
+    font-size: 14px;
+    line-height: 1.6;
+    margin: 10px 0;
+  }
+  .confirm-actions button {
+    flex: 1;
+    min-height: 40px;
+  }
+  dialog.user-tutorial-dlg {
+    padding: 16px 14px;
+    border-radius: 12px;
+  }
+  dialog.user-tutorial-dlg ol {
+    padding-right: 18px;
+  }
+  dialog.custom-alert-dlg {
+    width: min(92vw, 380px);
+    border-radius: 16px;
+  }
+  .custom-alert-body {
+    padding: 22px 18px 18px;
+  }
+  .custom-alert-btn {
+    min-height: 42px;
+    font-size: 15px;
+    border-radius: 8px;
+  }
+
+  /* Settings Form on Mobile */
+  .form-grid {
+    max-width: 100%;
+    width: 100%;
+  }
+  .form-grid input {
+    height: 40px;
+    font-size: 14.5px;
+    border-radius: 6px;
+  }
+  .form-grid button[type=submit] {
+    min-height: 42px;
+    font-size: 15px;
+    border-radius: 6px;
+  }
+  #tab-settings .toolbar {
+    display: flex;
+    flex-direction: column;
+    width: 100%;
+  }
+  #tab-settings .toolbar button,
+  #tab-settings .toolbar label {
+    width: 100%;
+    min-height: 40px;
+    border-radius: 6px;
+    text-align: center;
+    box-sizing: border-box;
+    margin: 0;
+  }
+
+  /* Non-Sticky, Clean Mobile Footer */
+  .app-footer {
+    position: static;
+    margin-top: 16px;
+    padding: 12px 14px;
+    padding-bottom: max(14px, env(safe-area-inset-bottom));
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    gap: 8px;
+    text-align: center;
+  }
+  .footer-app, .footer-brand {
+    justify-content: center;
+    width: 100%;
+  }
+}
+
+/* Smartphone Centered Modal Filters (<= 540px) */
+@media (max-width: 540px) {
+  .ms-menu {
+    position: fixed;
+    top: 50% !important;
+    left: 50% !important;
+    right: auto !important;
+    transform: translate(-50%, -50%);
+    width: min(320px, calc(100vw - 24px));
+    max-width: calc(100vw - 24px);
+    max-height: 80vh;
+    box-shadow: 0 0 0 100vmax rgba(0, 0, 0, 0.45), 0 16px 48px rgba(0, 0, 0, 0.35);
+    border-radius: 12px;
+    padding: 10px;
+    z-index: 1000;
+  }
+  .ms-list {
+    max-height: 48vh;
+  }
+  .ms-opt {
+    padding: 7px 8px;
+    font-size: 14px;
+  }
+  .ms-bottom {
+    display: block;
+  }
+  
+  .xf-menu {
+    position: fixed;
+    top: 50% !important;
+    left: 50% !important;
+    right: auto !important;
+    transform: translate(-50%, -50%);
+    width: min(320px, calc(100vw - 20px));
+    max-width: calc(100vw - 20px);
+    max-height: 85vh;
+    overflow-y: auto;
+    box-shadow: 0 0 0 100vmax rgba(0, 0, 0, 0.45), 0 16px 48px rgba(0, 0, 0, 0.35);
+    border-radius: 12px;
+  }
+  .xf-list {
+    max-height: 42vh;
+  }
+}
+
+/* Compact Mobile Devices (<= 480px) */
+@media (max-width: 480px) {
+  main {
+    padding: 6px 6px 12px;
+  }
+
+  .login-wrap {
+    padding: 16px 12px;
+  }
+  .login-box {
+    width: 100%;
+    max-width: 360px;
+    padding: 22px 18px;
+    border-radius: 10px;
+    box-shadow: 0 4px 18px rgba(0, 0, 0, 0.08);
+  }
+  .login-box h1 {
+    font-size: 20px;
+  }
+  .login-box input {
+    height: 40px;
+    font-size: 15px;
+    border-radius: 6px;
+  }
+  .login-box .btn {
+    min-height: 42px;
+    font-size: 15px;
+    border-radius: 6px;
+  }
+
+  .entry-actions {
+    grid-template-columns: repeat(2, 1fr);
+  }
+
+  #tab-users .toolbar select {
+    flex: 1 1 calc(50% - 3px);
+  }
+  #tab-users .toolbar select:last-of-type {
+    flex: 1 1 100%;
+  }
+
+  .tutorial-select-demo,
+  .tutorial-button-demo {
+    flex-wrap: wrap;
+    gap: 6px;
+  }
+}
+
+/* Extra Small Screens (<= 360px) */
+@media (max-width: 360px) {
+  .topbar .title span {
+    font-size: 14.5px;
+  }
+  #whoLabel {
+    max-width: 85px;
+    font-size: 11.5px;
+  }
+  .summary div {
+    font-size: 11px;
+    padding: 5px 2px;
+  }
+  .summary b {
+    font-size: 15px;
+  }
+  .filter-bar .ms-wrap,
+  .filter-bar .entry-owner,
+  .filter-bar #fStatus,
+  .filter-bar #rStatus,
+  #tab-log .filter-bar select,
+  #tab-users .toolbar select {
+    flex: 1 1 100% !important;
+    min-width: 100% !important;
+  }
+  .entry-actions {
+    grid-template-columns: 1fr;
+  }
 }
