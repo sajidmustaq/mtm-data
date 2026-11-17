@@ -26,10 +26,13 @@ create table if not exists public.records (
   division text not null default '',
   province text not null,
   assigned_to uuid[] not null default '{}',
+  active boolean not null default true,
   source_key text not null unique,
   updated_at text not null default '',
   updated_at_ms bigint not null default 0
 );
+
+alter table public.records add column if not exists active boolean not null default true;
 
 create index if not exists idx_records_assigned_to on public.records using gin (assigned_to);
 create index if not exists idx_records_province on public.records (province);
@@ -154,13 +157,14 @@ begin
   set assigned_to = pg_catalog.array_remove(assigned_to, target_uid),
       updated_at_ms = (extract(epoch from now()) * 1000)::bigint
   where target_uid = any(assigned_to)
-    and not private.user_matches_record(u_rec.assignments, province, division);
+    and (not active or not private.user_matches_record(u_rec.assignments, province, division));
   get diagnostics c1 = row_count;
 
   update public.records
   set assigned_to = pg_catalog.array_append(assigned_to, target_uid),
       updated_at_ms = (extract(epoch from now()) * 1000)::bigint
   where not (target_uid = any(assigned_to))
+    and active
     and private.user_matches_record(u_rec.assignments, province, division);
   get diagnostics c2 = row_count;
 

@@ -202,13 +202,24 @@ function showUserTutorial(user) {
 function visibleRows() {
   if (!me) return [];
   if (me.role === "admin") {
+    const employmentStatus = $("fEmploymentStatus")?.value || "active";
     const selectedUid = $("entryUser")?.value || "";
+    const scopedRows = DATA.filter(row =>
+      employmentStatus === "all" ||
+      (employmentStatus === "closed" ? row.active === false : row.active !== false)
+    );
     if (selectedUid && selectedUid !== me.id) {
-      return DATA.filter(row => row.assignedTo?.includes(selectedUid));
+      const closedRecordIds = new Set(ENTRIES
+        .filter(entry => entry.userId === selectedUid)
+        .map(entry => entry.recordId));
+      return scopedRows.filter(row =>
+        row.assignedTo?.includes(selectedUid) ||
+        (row.active === false && closedRecordIds.has(row.id))
+      );
     }
-    return DATA;
+    return scopedRows;
   }
-  return DATA.filter(row => row.assignedTo?.includes(me.id) && hasRegion(me, row));
+  return DATA.filter(row => row.active !== false && row.assignedTo?.includes(me.id) && hasRegion(me, row));
 }
 
 function entryOwnerId() {
@@ -403,6 +414,7 @@ function rawFromDbRecord(rec, priv = null) {
     division: nfc(rec.division),
     district: nfc(rec.district),
     assignedTo: Array.isArray(rec.assigned_to) ? rec.assigned_to : [],
+    active: rec.active !== false,
     sourceKey: nfc(rec.source_key),
     updatedAt: rec.updated_at || "",
     updatedAtMs: Number(rec.updated_at_ms || 0)
@@ -421,7 +433,7 @@ function rowFromDocData(id, raw) {
     if (!isAdmin && ADMIN_ONLY_COLS.includes(col)) return;
     if (byNfcKey[nfc(col)] !== undefined) normalized[col] = byNfcKey[nfc(col)];
   });
-  return { id, ...normalized, assignedTo: raw?.assignedTo || [] };
+  return { id, ...normalized, assignedTo: raw?.assignedTo || [], active: raw?.active !== false };
 }
 
 function applyRecordDocs() {
@@ -472,7 +484,7 @@ async function loadRecords(user, forceServer = false) {
             if (isAdmin) {
               const deltaRecs = await fetchAll((from, to) =>
                 supabase.from("records")
-                  .select("id, code, name, father, duty, district, division, province, assigned_to, source_key, updated_at, updated_at_ms")
+                  .select("id, code, name, father, duty, district, division, province, assigned_to, active, source_key, updated_at, updated_at_ms")
                   .gt("updated_at_ms", lastSyncMs)
                   .order("id", { ascending: true })
                   .range(from, to)
@@ -510,7 +522,7 @@ async function loadRecords(user, forceServer = false) {
     const [recRows, privRows] = await withLoader("ریکارڈز لوڈ ہو رہے ہیں...", async () => {
       const recPromise = fetchAll((from, to) => {
         let q = supabase.from("records")
-          .select("id, code, name, father, duty, district, division, province, assigned_to, source_key, updated_at, updated_at_ms");
+          .select("id, code, name, father, duty, district, division, province, assigned_to, active, source_key, updated_at, updated_at_ms");
         if (!isAdmin) q = q.contains("assigned_to", [user.id]);
         return q.order("id", { ascending: true }).range(from, to);
       });
@@ -681,6 +693,7 @@ function resetAllFilters() {
   ["fSearch", "fStatus", "rSearch", "rStatus", "reportUser", "uSearch", "uFilterRole", "uFilterProvince", "uFilterStatus", "logSearch", "logUser", "logProvince", "logDivision", "logDistrict", "logAction"].forEach(id => {
     if ($(id)) $(id).value = "";
   });
+  if ($("fEmploymentStatus")) $("fEmploymentStatus").value = "active";
   Object.values(multiFilters).forEach(mf => mf.clear(true));
   Object.values(reportMultiFilters).forEach(mf => mf.clear(true));
   tableColFilters.clear();
@@ -1454,12 +1467,15 @@ function renderTable() {
   $("dataTable").querySelector("tbody").innerHTML = slice.map((row, i) => {
     const saved = entryFor(row, ownerId) || {};
     const locked = isEntryLocked(saved);
-    const editable = isAdmin || !locked;
+    const closed = row.active === false;
+    const editable = !closed && (isAdmin || !locked);
     const entry = editable && DRAFT_ENTRIES.has(row.id) ? DRAFT_ENTRIES.get(row.id) : saved;
     const ownerUser = saved.userId ? USERS.find(u => u.id === saved.userId) : null;
     const ownerBadge = ownerUser ? ownerUser.username : (saved.updatedBy || "");
     let actionCell;
-    if (locked && !isAdmin) {
+    if (closed) {
+      actionCell = '<span class="tag off">Inactive</span>';
+    } else if (locked && !isAdmin) {
       actionCell = '<span class="tag submitted-tag">✓ جمع شدہ</span>';
     } else if (locked && isAdmin) {
       const label = ownerBadge ? `✓ ${esc(ownerBadge)}` : "✓ جمع شدہ";
@@ -1467,6 +1483,9 @@ function renderTable() {
     } else {
       actionCell = `<button type="button" class="btn row-submit-btn" data-act="submit-row" data-id="${esc(row.id)}">محفوظ کریں </button>`;
     }
+    const employmentButton = isAdmin
+      ? `<button type="button" class="btn-light row-submit-btn" data-act="${closed ? "reactivate-record" : "close-record"}" data-id="${esc(row.id)}">${closed ? "Activate" : "Deactivate"}</button>`
+      : "";
     return `<tr class="${isDone(saved) ? "done" : "pending"}">
       <td>${(page - 1) * PAGE_SIZE + i + 1}</td>
       <td>${esc(row[K.code])}</td><td title="${esc(row[K.name])}">${esc(row[K.name])}</td><td>${esc(row[K.father])}</td>
@@ -1475,7 +1494,7 @@ function renderTable() {
       ${isAdmin ? `<td>${esc(row[K.offMin])}</td><td>${esc(row[K.grade])}</td><td>${esc(row[K.ijaraMin])}</td>` : ""}
       <td><select ${editable ? "" : "disabled"} class="${selClass(entry[K.hifz])}" data-id="${esc(row.id)}" data-f="hifz">${opts(entry[K.hifz])}</select></td>
       <td><select ${editable ? "" : "disabled"} class="${selClass(entry[K.nazra])}" data-id="${esc(row.id)}" data-f="nazra">${opts(entry[K.nazra])}</select></td>
-      <td>${actionCell}</td>
+      <td>${actionCell} ${employmentButton}</td>
     </tr>`;
   }).join("") || `<tr><td colspan="${isAdmin ? 15 : 10}" class="center">کوئی ریکارڈ نہیں ملا</td></tr>`;
   const countLabel = rows.length !== summaryRows.length
@@ -1552,8 +1571,63 @@ $("dataTable").addEventListener("change", event => {
 });
 
 $("dataTable").addEventListener("click", async event => {
-  const button = event.target.closest('button[data-act="submit-row"]');
+  const button = event.target.closest("button[data-act]");
   if (!button) return;
+  if (button.dataset.act === "close-record" || button.dataset.act === "reactivate-record") {
+    if (!requireAdmin()) return;
+    const row = DATA.find(r => r.id === button.dataset.id);
+    if (!row) return;
+    const active = button.dataset.act === "reactivate-record";
+    const confirmed = await showConfirmModal({
+      icon: active ? "ℹ️" : "⚠️",
+      title: active ? "Activate employee" : "Deactivate employee",
+      message: active
+        ? "یہ ریکارڈ عام اجیر فہرست اور رپورٹ میں دوبارہ دکھائی دے گا۔"
+        : "یہ ریکارڈ عام فہرست اور رپورٹ سے چھپ جائے گا۔ محفوظ شدہ انٹریاں حذف نہیں ہوں گی۔",
+      detailsHtml: `<div><b>عملہ کوڈ:</b> ${esc(row[K.code])}</div><div><b>نام:</b> ${esc(row[K.name])}</div>`,
+      okText: active ? "Activate" : "Deactivate",
+      cancelText: "منسوخ کریں",
+      showCancel: true
+    });
+    if (!confirmed) return;
+    setButtonBusy(button, true, active ? "Activating..." : "Deactivating...");
+    try {
+      await withLoader(active ? "Activating employee..." : "Deactivating employee...", async () => {
+        const updatedAt = nowStr();
+        const updatedAtMs = Date.now();
+        const assignedTo = active
+          ? USERS.filter(user => user.active && userCanSeeRegion(user, row)).map(user => user.id)
+          : [];
+        const { data, error } = await supabase.from("records")
+          .update({ active, assigned_to: assignedTo, updated_at: updatedAt, updated_at_ms: updatedAtMs })
+          .eq("id", row.id)
+          .select("active, assigned_to")
+          .single();
+        if (error) throw error;
+        const raw = RECORD_DOCS.get(row.id);
+        if (raw) {
+          raw.active = data.active;
+          raw.assignedTo = data.assigned_to || [];
+          raw.updatedAt = updatedAt;
+          raw.updatedAtMs = updatedAtMs;
+        }
+        await cachePut(syncStorageKey(me.id), [...RECORD_DOCS.values()]);
+        localStorage.setItem(syncStorageKey(me.id), String(Math.max(0, Date.now() - 10000)));
+        applyRecordDocs();
+        saveLog(active ? "Employee activated" : "Employee deactivated", `${row[K.code]} — ${row[K.name]}`, {
+          province: row[K.province] || "",
+          division: row[K.division] || "",
+          district: row[K.district] || ""
+        }).catch(error => reportError("کارروائی مکمل ہو گئی، مگر سرگرمی لاگ محفوظ نہیں ہوا", error));
+      });
+    } catch (error) {
+      reportError(active ? "Could not activate employee" : "Could not deactivate employee", error);
+    } finally {
+      setButtonBusy(button, false);
+    }
+    return;
+  }
+  if (button.dataset.act !== "submit-row") return;
   const row = DATA.find(r => r.id === button.dataset.id);
   const saved = row ? (entryFor(row) || {}) : {};
   const isAdmin = me?.role === "admin";
@@ -1673,9 +1747,11 @@ $("dataTable").addEventListener("click", async event => {
 
 $("fSearch").addEventListener("input", () => { page = 1; renderTable(); });
 $("fStatus").addEventListener("change", () => { page = 1; renderTable(); });
+$("fEmploymentStatus").addEventListener("change", () => { page = 1; renderTable(); });
 $("clearFiltersBtn").addEventListener("click", () => {
   $("fSearch").value = "";
   $("fStatus").value = "";
+  $("fEmploymentStatus").value = "active";
   Object.values(multiFilters).forEach(mf => mf.clear(true));
   tableColFilters.clear();
   tableSort = { key: null, dir: "" };
@@ -1788,9 +1864,12 @@ function userCanSeeRegion(user, row) {
   return user.role === "admin" || hasRegion(user, row);
 }
 
-function buildRecordPayload(row, updatedAt, updatedAtMs) {
-  const assignedTo = USERS.filter(user => user.active && userCanSeeRegion(user, row)).map(user => user.id);
+function buildRecordPayload(row, updatedAt, updatedAtMs, activeState = null) {
   const id = recordId(row);
+  const active = activeState ?? (RECORD_DOCS.get(id)?.active !== false);
+  const assignedTo = active
+    ? USERS.filter(user => user.active && userCanSeeRegion(user, row)).map(user => user.id)
+    : [];
   return {
     recRow: {
       id,
@@ -1802,6 +1881,7 @@ function buildRecordPayload(row, updatedAt, updatedAtMs) {
       division: row[K.division] || "",
       province: row[K.province],
       assigned_to: assignedTo,
+      active,
       source_key: `${row[K.code]}|${row[K.province]}`,
       updated_at: updatedAt,
       updated_at_ms: updatedAtMs
@@ -1820,6 +1900,7 @@ function buildRecordPayload(row, updatedAt, updatedAtMs) {
       division: row[K.division],
       district: row[K.district],
       assignedTo,
+      active,
       sourceKey: `${row[K.code]}|${row[K.province]}`,
       updatedAt,
       updatedAtMs
@@ -1891,19 +1972,20 @@ $("importFile").addEventListener("change", event => {
 });
 
 function reportBaseRows() {
+  const activeRows = DATA.filter(row => row.active !== false);
   const ownerId = $("reportUser")?.value || "";
-  if (!ownerId) return DATA;
+  if (!ownerId) return activeRows;
   const user = USERS.find(u => u.id === ownerId);
-  if (!user) return DATA.filter(row => row.assignedTo?.includes(ownerId));
+  if (!user) return activeRows.filter(row => row.assignedTo?.includes(ownerId));
   if (user.role === "admin") {
     const touchedIds = new Set(
       ENTRIES
         .filter(e => e.userId === ownerId || (user.username && e.updatedBy === user.username))
         .map(e => e.recordId)
     );
-    return DATA.filter(row => touchedIds.has(row.id));
+    return activeRows.filter(row => touchedIds.has(row.id));
   }
-  return DATA.filter(row => hasRegion(user, row));
+  return activeRows.filter(row => hasRegion(user, row));
 }
 
 function reportCompletedSet(ownerId = $("reportUser")?.value || "") {
@@ -2183,7 +2265,7 @@ async function syncRecordAssignmentsClient(uid, targetUser, runRpc = true) {
     const row = rowFromDocData(id, raw);
     const prev = Array.isArray(raw.assignedTo) ? raw.assignedTo : [];
     const hasUid = prev.includes(uid);
-    const shouldHave = !!(targetUser && targetUser.active && userCanSeeRegion(targetUser, row));
+    const shouldHave = row.active !== false && !!(targetUser && targetUser.active && userCanSeeRegion(targetUser, row));
     if (hasUid !== shouldHave) {
       raw.assignedTo = shouldHave ? [...new Set([...prev, uid])] : prev.filter(x => x !== uid);
       raw.updatedAtMs = nowMs;
@@ -2687,7 +2769,10 @@ $("restoreFile").addEventListener("change", event => {
             const rawInput = item?.data || item;
             const row = normalizeRecord(rawInput);
             if (!row) throw new Error("بیک اپ میں ریکارڈ کا صوبہ یا کوڈ موجود نہیں");
-            const built = buildRecordPayload(row, updatedAt, updatedAtMs);
+            const active = typeof item?.active === "boolean"
+              ? item.active
+              : RECORD_DOCS.get(recordId(row))?.active !== false;
+            const built = buildRecordPayload(row, updatedAt, updatedAtMs, active);
             if (item?.id && item.id === built.recRow.id) {
               recRows.push(built.recRow);
               privRows.push(built.privRow);
